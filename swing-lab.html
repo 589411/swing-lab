@@ -47,8 +47,8 @@ header{display:flex;align-items:stretch;border-bottom:3px solid var(--paper)}
   .panel-l{border-right:none;border-top:2px solid var(--smoke)}
 }
 @media(max-width:640px){
-  .grid16{grid-template-columns:repeat(8,1fr)}
-  .beatnum,.stick{display:none}
+  .seq-row,.beatnum{grid-template-columns:64px repeat(var(--cols,16),1fr);min-width:460px}
+  .vlabel{font-size:9px;padding:0 4px;gap:4px}
   .hd-brass{display:none}
   .hd-title{font-size:24px}
   .hd-block{padding:10px 14px}
@@ -130,15 +130,26 @@ select{width:100%;background:var(--smoke);color:var(--paper);border:none;padding
 .seq-head .sec-t{margin:0}
 .seq-head .sec-t::after{display:none}
 .seq-head select{width:auto;min-width:200px;background:var(--ink)}
-.grid16{display:grid;grid-template-columns:repeat(16,1fr);gap:5px;max-width:1100px}
-.step{aspect-ratio:1/1.15;border-radius:6px;background:#1b1611;border:2px solid #33291f;position:relative;transition:.1s;min-width:0}
+.seq-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.seq-row{display:grid;grid-template-columns:92px repeat(var(--cols,16),1fr);gap:5px;max-width:1100px;margin-bottom:6px;min-width:540px}
+.vlabel{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:900;color:var(--dim);
+  background:#1b1611;border:2px solid #33291f;border-radius:6px;padding:0 7px;cursor:pointer;
+  letter-spacing:.03em;white-space:nowrap;transition:.15s}
+.vlabel .dot{width:8px;height:8px;border-radius:50%;background:var(--vcol,#888);flex:none}
+.seq-row.pv .vlabel{border-color:var(--vcol);color:var(--paper)}
+.seq-row.pv .vlabel::after{content:"🎯";margin-left:auto;font-size:10px}
+.step{aspect-ratio:1/1;border-radius:6px;background:#1b1611;border:2px solid #33291f;position:relative;transition:.1s;min-width:0}
 .step.beat1{border-left-width:4px;border-left-color:var(--dim)}
-.step.on{background:var(--brass);border-color:var(--brass)}
+.step.on{background:var(--vcol,var(--brass));border-color:var(--vcol,var(--brass))}
 .step.acc{background:var(--coral);border-color:var(--coral)}
 .step.cur{outline:3px solid var(--paper);outline-offset:1px}
-.stick{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:11px;font-weight:900;color:var(--dim)}
-.beatnum{display:grid;grid-template-columns:repeat(16,1fr);gap:5px;max-width:1100px;margin-top:26px}
+.seq-row:not(.pv) .step.on,.seq-row:not(.pv) .step.acc{opacity:.45}
+.stick{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;color:rgba(23,19,16,.85);pointer-events:none}
+.beatnum{display:grid;grid-template-columns:92px repeat(var(--cols,16),1fr);gap:5px;max-width:1100px;margin-top:2px;min-width:540px}
 .beatnum span{text-align:center;font-size:10px;color:var(--dim);font-weight:700}
+.gridseg{display:flex;gap:6px}
+.gridseg .mode-btn{padding:7px 12px;font-size:11px}
 
 /* ---------- Camera ---------- */
 #camBox{display:none;margin-top:10px}
@@ -225,9 +236,11 @@ body{touch-action:manipulation}
       <summary class="sec-t">聲音</summary>
       <label class="sl">節拍器音量 <b id="mvVal">70</b></label>
       <input type="range" id="metVol" min="0" max="100" value="70">
-      <label class="sl">引導音音量 <b id="gvVal">50</b></label>
+      <label class="sl">練習聲部音量 🎯 <b id="gvVal">50</b></label>
       <input type="range" id="gdVol" min="0" max="100" value="50">
-      <div class="hint">引導音會示範節奏型。練熟後把它關成 0,只留節拍器——這才是真正的考試模式。</div>
+      <label class="sl">背景聲部音量 <b id="bvVal">40</b></label>
+      <input type="range" id="bgVol" min="0" max="100" value="40">
+      <div class="hint">練習聲部(🎯)會播示範音,練熟後關成 0 只留節拍器——考試模式。背景聲部是其他三肢的陪伴聲,幫你建立整組律動的耳朵。</div>
     </details>
 
     <details class="sec" open>
@@ -295,34 +308,37 @@ body{touch-action:manipulation}
   <div class="seq-head">
     <div class="sec-t">節奏型工作台</div>
     <select id="preset">
-      <optgroup label="基本功 Rudiments">
+      <optgroup label="基本功 Rudiments(16分)">
         <option value="sixteenth">十六分音符 · 單擊</option>
         <option value="eighth" selected>八分音符 · 穩定練習</option>
         <option value="doublestroke">Double Stroke · RRLL 雙擊</option>
         <option value="paradiddle">Paradiddle · RLRR LRLL</option>
         <option value="fivestroke">Five Stroke Roll · 五連擊</option>
       </optgroup>
-      <optgroup label="爵士 Swing">
-        <option value="swingride">Swing Ride · 爵士鑔片型</option>
-        <option value="shuffle">Shuffle · 藍調搖擺</option>
-        <option value="charleston">Charleston · 爵士切分</option>
-        <option value="offbeat">反拍練習 · Off-beat Comping</option>
+      <optgroup label="爵士鼓組 Jazz Kit(三連音)">
+        <option value="swingtime">① Swing Time · Ride+踩鑔</option>
+        <option value="feather">② Feathering · 大鼓輕觸</option>
+        <option value="charleston12">③ Charleston · 小鼓切分</option>
+        <option value="comping1">④ Comping A · 小鼓對話</option>
+        <option value="skipnote">⑤ Skip Note · 反拍練習</option>
+        <option value="shuffle12">⑥ Shuffle · 全套律動</option>
       </optgroup>
-      <optgroup label="拉丁 Latin">
+      <optgroup label="拉丁 Latin(16分)">
         <option value="clave">Son Clave 3-2</option>
         <option value="rumba">Rumba Clave 3-2</option>
         <option value="tresillo">Tresillo · 3-3-2</option>
       </optgroup>
       <option value="custom">✏️ 自訂(點格子編輯)</option>
     </select>
-    <span class="hint" style="margin:0">點格子切換:關 → <span style="color:var(--brass)">開</span> → <span style="color:var(--coral)">重音</span></span>
+    <div class="gridseg">
+      <button class="mode-btn on" id="g16">16分</button>
+      <button class="mode-btn" id="g12">三連音</button>
+    </div>
+    <span class="hint" style="margin:0">點格子:關 → 開 → <span style="color:var(--coral)">重音</span>;點聲部名稱＝設為練習聲部 🎯</span>
   </div>
-  <div class="grid16" id="grid"></div>
-  <div class="beatnum">
-    <span>1</span><span>e</span><span>&amp;</span><span>a</span>
-    <span>2</span><span>e</span><span>&amp;</span><span>a</span>
-    <span>3</span><span>e</span><span>&amp;</span><span>a</span>
-    <span>4</span><span>e</span><span>&amp;</span><span>a</span>
+  <div class="seq-scroll">
+    <div id="seqRows"></div>
+    <div class="beatnum" id="beatnum"></div>
   </div>
 </div>
 
@@ -364,10 +380,20 @@ let ctx = null;                 // AudioContext
 let running = false;
 let offsets = {mic:0, tap:0};   // 秒。麥克風與觸控各自校準(觸控螢幕本身也有 30~70ms 延遲)
 
-/* ---------- 節奏狀態 ---------- */
+/* ---------- 節奏狀態(多聲部) ---------- */
 let bpm = 90, swing = 0;
-let pattern = new Array(16).fill(0);   // 0 off / 1 on / 2 accent
-let sticking = new Array(16).fill('');
+let grid = 16;                          // 16=十六分音符 / 12=三連音(每拍3格,爵士)
+const VOICES = [
+  {id:'ride', name:'RIDE 鑔片', col:'#D9A441'},
+  {id:'hh',   name:'HH 踩鑔',  col:'#7fa8ec'},
+  {id:'snare',name:'SN 小鼓',  col:'#EDE2CB'},
+  {id:'kick', name:'KICK 大鼓', col:'#E4502E'}
+];
+const VOICE_IDS = VOICES.map(v=>v.id);
+let pattern = {};                       // voice id → Array(grid) 0 off/1 on/2 accent
+VOICE_IDS.forEach(v=> pattern[v]=new Array(16).fill(0));
+let sticking = new Array(16).fill(''); // 手序(顯示於小鼓聲部)
+let practiceVoice = 'snare';           // 🎯 隔離練習:只判定此聲部,其餘為背景
 let barStart = 0, barDur = 0, stepIdx = 0;
 let pendingBpm = null;
 let expected = [];              // {time, step, judged, result}
@@ -390,21 +416,23 @@ let mode='pad', inputSrc='mic';
 
 /* ---------- 節奏型 preset ---------- */
 const PRESETS = {
-  /* 基本功 */
-  sixteenth:  {p:'1111111111111111', s:'RLRLRLRLRLRLRLRL', sw:0},
-  eighth:     {p:'2010101020101010', s:'R L R L R L R L ', sw:0},
-  doublestroke:{p:'2111211121112111', s:'RRLLRRLLRRLLRRLL', sw:0},
-  paradiddle: {p:'2111211121112111', s:'RLRRLRLLRLRRLRLL', sw:0},
-  fivestroke: {p:'1111200011112000', s:'RRLLR   LLRRL   ', sw:0},
-  /* 爵士 Swing */
-  swingride:  {p:'2000101020001010', s:'R   R L R   R L ', sw:66},
-  shuffle:    {p:'2010101020101010', s:'R L R L R L R L ', sw:66},
-  charleston: {p:'2000001020000010', s:'R     R R     R ', sw:66},
-  offbeat:    {p:'0010001000100010', s:'  R   L   R   L ', sw:66},
-  /* 拉丁 Latin */
-  clave:      {p:'2001001000201000', s:'R  R  R   R R   ', sw:0},
-  rumba:      {p:'2001000100201000', s:'R  R   R  R R   ', sw:0},
-  tresillo:   {p:'2001001020010010', s:'R  L  R R  L  R ', sw:0}
+  /* 基本功(16格,小鼓單聲部) */
+  sixteenth:  {grid:16, sw:0, pv:'snare', v:{snare:'1111111111111111'}, s:'RLRLRLRLRLRLRLRL'},
+  eighth:     {grid:16, sw:0, pv:'snare', v:{snare:'2010101020101010'}, s:'R L R L R L R L '},
+  doublestroke:{grid:16, sw:0, pv:'snare', v:{snare:'2111211121112111'}, s:'RRLLRRLLRRLLRRLL'},
+  paradiddle: {grid:16, sw:0, pv:'snare', v:{snare:'2111211121112111'}, s:'RLRRLRLLRLRRLRLL'},
+  fivestroke: {grid:16, sw:0, pv:'snare', v:{snare:'1111200011112000'}, s:'RRLLR   LLRRL   '},
+  /* 爵士鼓組(三連音12格):標準教學進程——先 time、再腳、再 comping */
+  swingtime:  {grid:12, pv:'ride', v:{ride:'200101200101', hh:'000200000200'}},
+  feather:    {grid:12, pv:'kick', v:{ride:'200101200101', hh:'000200000200', kick:'100100100100'}},
+  charleston12:{grid:12, pv:'snare', v:{ride:'200101200101', hh:'000200000200', snare:'200001000000'}},
+  comping1:   {grid:12, pv:'snare', v:{ride:'200101200101', hh:'000200000200', snare:'001000001000'}},
+  skipnote:   {grid:12, pv:'snare', v:{ride:'200101200101', hh:'000200000200', snare:'001001001001'}},
+  shuffle12:  {grid:12, pv:'snare', v:{ride:'201201201201', hh:'000200000200', snare:'000200000200', kick:'100000100000'}},
+  /* 拉丁(16格) */
+  clave:      {grid:16, sw:0, pv:'snare', v:{snare:'2001001000201000'}, s:'R  R  R   R R   '},
+  rumba:      {grid:16, sw:0, pv:'snare', v:{snare:'2001000100201000'}, s:'R  R   R  R R   '},
+  tresillo:   {grid:16, sw:0, pv:'snare', v:{snare:'2001001020010010'}, s:'R  L  R R  L  R '}
 };
 
 /* =====================================================================
@@ -425,24 +453,64 @@ function clickSound(t, accent){
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.05);
 }
 let noiseBuf=null;
-function guideSound(t, accent){
-  const v = $('gdVol').value/100; if(v<=0) return;
+function getNoise(){
   if(!noiseBuf){
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate*0.06, ctx.sampleRate);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate*0.5, ctx.sampleRate);
     const d=noiseBuf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   }
-  const s=ctx.createBufferSource(); s.buffer=noiseBuf;
-  const f=ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=accent?900:2600; f.Q.value=1.2;
-  const g=ctx.createGain(); g.gain.value=0.9*v*(accent?1.4:1);
-  s.connect(f).connect(g).connect(ctx.destination); s.start(t);
+  return noiseBuf;
+}
+function noiseHit(t, dur, type, freq, q, vol){
+  const s=ctx.createBufferSource(); s.buffer=getNoise();
+  const f=ctx.createBiquadFilter(); f.type=type; f.frequency.value=freq; f.Q.value=q;
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  s.connect(f).connect(g).connect(ctx.destination);
+  s.start(t); s.stop(t+dur+0.02);
+}
+function toneHit(t, dur, type, f0, f1, vol){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0, t);
+  if(f1) o.frequency.exponentialRampToValueAtTime(f1, t+dur*0.8);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+/* 四聲部音色(WebAudio 合成)。練習聲部走 gdVol,背景聲部走 bgVol */
+function drumSound(voice, t, accent, isPractice){
+  const v = (isPractice ? $('gdVol').value : $('bgVol').value)/100;
+  if(v<=0) return;
+  const a = accent?1.35:1;
+  switch(voice){
+    case 'ride':   // 金屬 ping + 鑔面延音
+      toneHit(t, .16, 'square', 5300, null, .045*v*a);
+      noiseHit(t, accent?.5:.32, 'highpass', 6500, .7, .15*v*a);
+      break;
+    case 'hh':     // 左腳踩鑔 chick:極短噪音
+      noiseHit(t, .04, 'highpass', 7800, 1, .3*v*a);
+      break;
+    case 'snare':  // 響線噪音 + 鼓腔音
+      noiseHit(t, .11, 'bandpass', 1800, .8, .5*v*a);
+      toneHit(t, .07, 'triangle', 186, 140, .32*v*a);
+      break;
+    case 'kick':   // 正弦下潛(feathering 輕觸感)
+      toneHit(t, .13, 'sine', 105, 42, .85*v*a);
+      break;
+  }
 }
 
-/* ---------- 步進時間(含 swing):8分音符反拍延後 ---------- */
+/* ---------- 步進時間:12格=真三連音;16格=直拍+swing推移 ---------- */
 function stepTime(bStart, i, bDur, sw){
-  const beat = Math.floor(i/4), sub = i%4, beatDur = bDur/4;
-  let frac = sub/4;
-  if(sub===2) frac = 0.5 + (sw/100)*(2/3 - 0.5);   // 直拍0.5 → 三連音感2/3
+  const perBeat = grid/4, beat = Math.floor(i/perBeat), sub = i%perBeat, beatDur = bDur/4;
+  let frac;
+  if(grid===12){
+    frac = sub/3;                                   // 三連音在數學上就是 swing
+  }else{
+    frac = sub/4;
+    if(sub===2) frac = 0.5 + (sw/100)*(2/3 - 0.5);  // 直拍0.5 → 三連音感2/3
+  }
   return bStart + beat*beatDur + frac*beatDur;
 }
 
@@ -453,15 +521,19 @@ function scheduler(){
     const t = stepTime(barStart, stepIdx, barDur, swing);
     if(t >= now + LOOKAHEAD) break;
     // 節拍器:每拍頭
-    if(stepIdx%4===0) clickSound(t, stepIdx===0);
-    // 節奏型步
-    if(pattern[stepIdx]>0){
-      guideSound(t, pattern[stepIdx]===2);
-      expected.push({time:t, step:stepIdx, judged:false, result:''});
-      barExpected++;
+    if(stepIdx%(grid/4)===0) clickSound(t, stepIdx===0);
+    // 各聲部:練習聲部(🎯)建判定事件,其餘為背景陪伴
+    for(const vc of VOICE_IDS){
+      if(pattern[vc][stepIdx]>0){
+        drumSound(vc, t, pattern[vc][stepIdx]===2, vc===practiceVoice);
+        if(vc===practiceVoice){
+          expected.push({time:t, step:stepIdx, judged:false, result:''});
+          barExpected++;
+        }
+      }
     }
     stepIdx++;
-    if(stepIdx>=16){
+    if(stepIdx>=grid){
       stepIdx=0;
       barStart += barDur;
       onBarEnd();
@@ -699,10 +771,11 @@ $('calDone').onclick = ()=>{
 ===================================================================== */
 const cv = $('ring'), g2 = cv.getContext('2d');
 const CX=280, CY=280;
+const VRAD = {ride:152, hh:124, snare:96, kick:68};   // 各聲部同心圓半徑
 function angOf(frac){ return -Math.PI/2 + frac*2*Math.PI; }
 function addRipple(audioT, color){
   const frac = ((audioT - barStart)/barDur) % 1;
-  ripples.push({ang:angOf((frac+1)%1), t0:performance.now(), color});
+  ripples.push({ang:angOf((frac+1)%1), r:VRAD[practiceVoice], t0:performance.now(), color});
 }
 function drawRing(){
   g2.clearRect(0,0,560,560);
@@ -712,9 +785,9 @@ function drawRing(){
   g2.beginPath(); g2.arc(CX,CY,228,0,7); g2.strokeStyle='#D9A441'; g2.lineWidth=6; g2.stroke();
   g2.beginPath(); g2.arc(CX,CY,214,0,7); g2.fillStyle='#EDE2CB'; g2.fill();
   g2.beginPath(); g2.arc(CX,CY,214,0,7); g2.strokeStyle='rgba(0,0,0,.15)'; g2.lineWidth=2; g2.stroke();
-  // 拍點刻度
-  for(let b=0;b<16;b++){
-    const a=angOf(b/16), main=b%4===0;
+  // 拍點刻度(依 grid 12/16)
+  for(let b=0;b<grid;b++){
+    const a=angOf(stepTime(0,b,1,swing)), main=b%(grid/4)===0;
     const r1=main?188:198, r2=206;
     g2.beginPath();
     g2.moveTo(CX+Math.cos(a)*r1, CY+Math.sin(a)*r1);
@@ -722,32 +795,35 @@ function drawRing(){
     g2.strokeStyle=main?'#171310':'rgba(23,19,16,.3)'; g2.lineWidth=main?3:1.5; g2.stroke();
     if(main){
       g2.fillStyle='#171310'; g2.font='900 20px Anton'; g2.textAlign='center'; g2.textBaseline='middle';
-      g2.fillText(String(b/4+1), CX+Math.cos(a)*172, CY+Math.sin(a)*172);
+      g2.fillText(String(b/(grid/4)+1), CX+Math.cos(a)*174, CY+Math.sin(a)*174);
     }
   }
-  // 節奏型音符
-  const NR=140;
-  for(let i=0;i<16;i++){
-    if(pattern[i]===0) continue;
-    const fakeBar=0, t = stepTime(0,i,1,swing);       // 以小節比例算角度
-    const a = angOf(t);
-    const acc = pattern[i]===2;
-    // 找最近一次此 step 的判定結果來上色
-    let col = acc? '#E4502E' : '#2F6FD6';
-    g2.beginPath(); g2.arc(CX+Math.cos(a)*NR, CY+Math.sin(a)*NR, acc?15:11, 0, 7);
-    g2.fillStyle=col; g2.fill();
-    g2.strokeStyle='#171310'; g2.lineWidth=2; g2.stroke();
-    if(sticking[i] && sticking[i]!==' '){
-      g2.fillStyle='#F1E7D3'; g2.font='700 11px Noto Sans TC'; g2.textAlign='center'; g2.textBaseline='middle';
-      g2.fillText(sticking[i], CX+Math.cos(a)*NR, CY+Math.sin(a)*NR+0.5);
+  // 多聲部音符:練習聲部(🎯)實心醒目,背景聲部半透明
+  for(const vinfo of VOICES){
+    const vc=vinfo.id, R=VRAD[vc], isPv=vc===practiceVoice;
+    // 聲部軌道虛線
+    g2.beginPath(); g2.arc(CX,CY,R,0,7);
+    g2.setLineDash([2,5]); g2.strokeStyle=isPv?'rgba(23,19,16,.35)':'rgba(23,19,16,.12)';
+    g2.lineWidth=1; g2.stroke(); g2.setLineDash([]);
+    for(let i=0;i<grid;i++){
+      if(pattern[vc][i]===0) continue;
+      const a = angOf(stepTime(0,i,1,swing));        // 以小節比例算角度
+      const acc = pattern[vc][i]===2;
+      g2.beginPath(); g2.arc(CX+Math.cos(a)*R, CY+Math.sin(a)*R, isPv?(acc?14:10):(acc?9:6.5), 0, 7);
+      g2.fillStyle=vinfo.col; g2.globalAlpha=isPv?1:.4; g2.fill(); g2.globalAlpha=1;
+      g2.strokeStyle='#171310'; g2.lineWidth=isPv?2:1; g2.stroke();
+      if(isPv && vc==='snare' && sticking[i] && sticking[i].trim()){
+        g2.fillStyle='#171310'; g2.font='700 10px Noto Sans TC'; g2.textAlign='center'; g2.textBaseline='middle';
+        g2.fillText(sticking[i], CX+Math.cos(a)*R, CY+Math.sin(a)*R+0.5);
+      }
     }
   }
-  // 漣漪
+  // 漣漪(在練習聲部軌道上)
   const pnow=performance.now();
   ripples = ripples.filter(r=> pnow-r.t0 < 500);
   for(const r of ripples){
     const p=(pnow-r.t0)/500;
-    g2.beginPath(); g2.arc(CX+Math.cos(r.ang)*NR, CY+Math.sin(r.ang)*NR, 12+p*34, 0, 7);
+    g2.beginPath(); g2.arc(CX+Math.cos(r.ang)*r.r, CY+Math.sin(r.ang)*r.r, 12+p*34, 0, 7);
     g2.strokeStyle=r.color; g2.globalAlpha=1-p; g2.lineWidth=4; g2.stroke(); g2.globalAlpha=1;
   }
   // 掃針(鼓棒)
@@ -759,9 +835,9 @@ function drawRing(){
     g2.strokeStyle='#171310'; g2.lineWidth=5; g2.lineCap='round'; g2.stroke();
     g2.beginPath(); g2.arc(200,0,8,0,7); g2.fillStyle='#D9A441'; g2.fill();  // 棒頭
     g2.restore();
-    // 目前 step 高亮(sequencer)
-    const curStep = Math.floor(frac*16)%16;
-    document.querySelectorAll('.step').forEach((el,i)=> el.classList.toggle('cur', i===curStep));
+    // 目前 step 高亮(sequencer,四軌同步)
+    const curStep = Math.floor(frac*grid)%grid;
+    document.querySelectorAll('.step').forEach(el=> el.classList.toggle('cur', +el.dataset.i===curStep));
   }
   // 中心 logo
   g2.fillStyle='rgba(23,19,16,.75)'; g2.font='900 13px Anton'; g2.textAlign='center';
@@ -830,31 +906,74 @@ function camTick(){
 /* =====================================================================
    Sequencer UI
 ===================================================================== */
-const grid=$('grid');
-for(let i=0;i<16;i++){
-  const b=document.createElement('button');
-  b.className='step'+(i%4===0?' beat1':'');
-  b.innerHTML='<span class="stick"></span>';
-  b.onclick=()=>{
-    pattern[i]=(pattern[i]+1)%3;
-    $('preset').value='custom';
-    renderGrid();
-  };
-  grid.appendChild(b);
+const seqRows=$('seqRows'), beatnumEl=$('beatnum');
+function buildSeq(){
+  seqRows.innerHTML='';
+  for(const vinfo of VOICES){
+    const row=document.createElement('div');
+    row.className='seq-row'; row.dataset.v=vinfo.id;
+    row.style.setProperty('--vcol', vinfo.col);
+    row.style.setProperty('--cols', grid);
+    const lb=document.createElement('button');
+    lb.className='vlabel'; lb.innerHTML=`<span class="dot"></span>${vinfo.name}`;
+    lb.title='點擊=設為練習聲部🎯';
+    lb.onclick=()=>{ practiceVoice=vinfo.id; renderGrid(); };
+    row.appendChild(lb);
+    for(let i=0;i<grid;i++){
+      const b=document.createElement('button');
+      b.className='step'+(i%(grid/4)===0?' beat1':''); b.dataset.i=i;
+      b.innerHTML='<span class="stick"></span>';
+      b.onclick=()=>{
+        pattern[vinfo.id][i]=(pattern[vinfo.id][i]+1)%3;
+        $('preset').value='custom';
+        renderGrid();
+      };
+      row.appendChild(b);
+    }
+    seqRows.appendChild(row);
+  }
+  beatnumEl.style.setProperty('--cols', grid);
+  const labs = grid===16
+    ? ['1','e','&','a','2','e','&','a','3','e','&','a','4','e','&','a']
+    : ['1','&','a','2','&','a','3','&','a','4','&','a'];
+  beatnumEl.innerHTML = '<span></span>' + labs.map(l=>`<span>${l}</span>`).join('');
 }
 function renderGrid(){
-  document.querySelectorAll('.step').forEach((el,i)=>{
-    el.classList.toggle('on', pattern[i]===1);
-    el.classList.toggle('acc', pattern[i]===2);
-    el.querySelector('.stick').textContent = pattern[i]>0 ? (sticking[i]||'').trim() : '';
+  document.querySelectorAll('.seq-row').forEach(row=>{
+    const vc=row.dataset.v;
+    row.classList.toggle('pv', vc===practiceVoice);
+    row.querySelectorAll('.step').forEach((el,i)=>{
+      el.classList.toggle('on', pattern[vc][i]===1);
+      el.classList.toggle('acc', pattern[vc][i]===2);
+      el.querySelector('.stick').textContent =
+        (vc==='snare' && pattern[vc][i]>0) ? (sticking[i]||'').trim() : '';
+    });
   });
 }
+function applyGridUI(){
+  $('g16').classList.toggle('on', grid===16);
+  $('g12').classList.toggle('on', grid===12);
+  $('swing').disabled = grid===12;
+  $('swVal').textContent = grid===12 ? '三連音' : swing+'%';
+}
+function setGrid(n){
+  if(running) stopRun();
+  grid=n;
+  VOICE_IDS.forEach(v=> pattern[v]=new Array(grid).fill(0));
+  sticking=new Array(grid).fill('');
+  applyGridUI(); buildSeq(); renderGrid();
+}
+$('g16').onclick=()=>{ if(grid!==16){ setGrid(16); $('preset').value='custom'; } };
+$('g12').onclick=()=>{ if(grid!==12){ setGrid(12); $('preset').value='custom'; } };
 function loadPreset(key){
   const pr=PRESETS[key]; if(!pr) return;
-  pattern = pr.p.split('').map(Number);
-  sticking = pr.s.split('');
-  swing = pr.sw; $('swing').value=swing; $('swVal').textContent=swing+'%';
-  renderGrid();
+  if(running) stopRun();
+  grid=pr.grid;
+  VOICE_IDS.forEach(v=> pattern[v]=(pr.v[v]||'').padEnd(grid,'0').split('').map(Number));
+  sticking=(pr.s||'').padEnd(grid,' ').split('').slice(0,grid);
+  swing=pr.sw||0; $('swing').value=swing;
+  practiceVoice=pr.pv||'snare';
+  applyGridUI(); buildSeq(); renderGrid();
 }
 $('preset').onchange = e=>{ if(e.target.value!=='custom') loadPreset(e.target.value); };
 loadPreset('eighth');
@@ -886,6 +1005,7 @@ $('sens').oninput = e=>{
 };
 $('metVol').oninput=e=>$('mvVal').textContent=e.target.value;
 $('gdVol').oninput=e=>$('gvVal').textContent=e.target.value;
+$('bgVol').oninput=e=>$('bvVal').textContent=e.target.value;
 
 /* ---------- 開始/停止(桌機+手機雙按鈕同步) ---------- */
 const goBtns = [$('goBtn'), $('goBtn2')];
