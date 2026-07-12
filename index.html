@@ -52,7 +52,8 @@ header{display:flex;align-items:stretch;border-bottom:3px solid var(--paper)}
   .hd-brass{display:none}
   .hd-title{font-size:24px}
   .hd-block{padding:10px 14px}
-  .hd-info{padding:10px 12px;gap:14px}
+  .hd-info{padding:10px 12px;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .stu-chip{max-width:120px;overflow:hidden;text-overflow:ellipsis;padding:6px 10px}
   .hd-stat .vl{font-size:22px}
   .stage{padding:10px 8px 4px}
   #ring{max-width:min(400px,86vw)}
@@ -434,6 +435,8 @@ const $ = id => document.getElementById(id);
 let ctx = null;                 // AudioContext
 let running = false;
 let offsets = {mic:0, tap:0};   // 秒。麥克風與觸控各自校準(觸控螢幕本身也有 30~70ms 延遲)
+// 校準值是「裝置屬性」,存本機——教室共用設備不用每次重校
+try{ Object.assign(offsets, JSON.parse(localStorage.getItem('swinglab_offsets'))||{}); }catch(e){}
 
 /* ---------- 節奏狀態(多聲部) ---------- */
 let bpm = 90, swing = 0;
@@ -472,6 +475,7 @@ let score=0, combo=0, bestCombo=0, nP=0,nG=0,nO=0,nM=0;
 let recentDeltas = [];          // 最近偏移(ms),畫傾向計
 let barExpected = 0, barHitPts = 0;   // 自動加速用
 let ripples = [];               // 視覺漣漪 {ang,t0,color}
+let needDraw = true;            // 閒置時不重繪(教室平板省電);UI 變動時設 true
 
 /* ---------- 模式 preset:靈敏度乘數 / 去抖動秒數 ---------- */
 const MODES = {
@@ -609,10 +613,12 @@ function scheduler(){
     }
   }
   // 清掃過期未判定 → MISS
+  // 重要:要把輸入延遲補償加進等待窗,否則高延遲裝置(校準值大)的打擊還沒進來就被判 MISS
+  const lateWin = 0.18 + (offsets[inputSrc]||0);
   for(const e of expected){
-    if(!e.judged && now - e.time > 0.18){ e.judged=true; e.result='M'; registerJudge('M', 0, e); }
+    if(!e.judged && now - e.time > lateWin){ e.judged=true; e.result='M'; registerJudge('M', 0, e); }
   }
-  expected = expected.filter(e => now - e.time < 3);
+  expected = expected.filter(e => now - e.time < 3 + lateWin);
 }
 function onBarEnd(){
   if($('autoUp').checked && barExpected>0){
@@ -829,6 +835,7 @@ $('calRedo').onclick = ()=> showCalStep(2);
 $('calDone').onclick = ()=>{
   const v = parseFloat($('calResult').dataset.v||'0');
   offsets[inputSrc] = v;
+  try{ localStorage.setItem('swinglab_offsets', JSON.stringify(offsets)); }catch(e){}
   $('hdLat').textContent = (v*1000).toFixed(0)+'ms';
   $('calModal').classList.remove('show');
 };
@@ -895,7 +902,7 @@ function drawRing(){
   }
   // 掃針(鼓棒)
   if(running && ctx){
-    const frac = ((now-barStart)/barDur+1)%1;
+    const frac = now<barStart ? 0 : ((now-barStart)/barDur)%1;   // count-in 期間停在拍1
     const a=angOf(frac);
     g2.save(); g2.translate(CX,CY); g2.rotate(a);
     g2.beginPath(); g2.moveTo(0,0); g2.lineTo(196,0);
@@ -910,7 +917,7 @@ function drawRing(){
   g2.fillStyle='rgba(23,19,16,.75)'; g2.font='900 13px Anton'; g2.textAlign='center';
   g2.fillText('SWING LAB', CX, CY-6);
   g2.font='700 10px Noto Sans TC'; g2.fillStyle='rgba(23,19,16,.5)';
-  g2.fillText(running?'一圈 = 一小節':'按開始練習', CX, CY+12);
+  g2.fillText(running ? (ctx&&ctx.currentTime<barStart?'COUNT IN…':'一圈 = 一小節') : '按開始練習', CX, CY+12);
 }
 
 /* ---------- 拍點傾向計 ---------- */
@@ -1016,6 +1023,7 @@ function renderGrid(){
         (vc==='snare' && pattern[vc][i]>0) ? (sticking[i]||'').trim() : '';
     });
   });
+  needDraw=true;
 }
 function applyGridUI(){
   $('g16').classList.toggle('on', grid===16);
@@ -1152,9 +1160,11 @@ function mergeRec(a,b){
   };
 }
 async function pullCloud(){
-  if(!curCode || !(await initCloud())) return;
+  const code=curCode;                    // 鎖定發起當下的學生
+  if(!code || !(await initCloud())) return;
   try{
-    const snap = await fbDb.collection('codes').doc(curCode).get();
+    const snap = await fbDb.collection('codes').doc(code).get();
+    if(curCode!==code) return;           // 等待期間已切換學生 → 丟棄,避免資料寫錯人
     if(snap.exists){
       const cloud=(snap.data()||{}).records||{}, local=loadRecs(), merged={};
       for(const k of new Set([...Object.keys(cloud), ...Object.keys(local)]))
@@ -1164,15 +1174,17 @@ async function pullCloud(){
   }catch(e){ console.warn('pull失敗:', e.message); }
 }
 async function pushCloud(){
-  if(!curCode || !(await initCloud())) return;
+  const code=curCode; if(!code) return;
+  // 先照相:發起當下的學生與資料,避免 await 期間切換學生造成張冠李戴
+  const payload = {name:(curProfile()||{}).name||'', records:loadRecs(), updated:Date.now()};
+  if(!(await initCloud())) return;
   try{
-    await fbDb.collection('codes').doc(curCode).set({
-      name:(curProfile()||{}).name||'', records:loadRecs(), updated:Date.now()
-    });
+    await fbDb.collection('codes').doc(code).set(payload);
   }catch(e){ console.warn('push失敗:', e.message); }
 }
 
 /* ---------- 學生切換 UI ---------- */
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function saveProfiles(){ try{ localStorage.setItem(PROF_KEY, JSON.stringify(profiles)); }catch(e){} }
 function setCur(code){
   curCode=code; try{ localStorage.setItem(CUR_KEY, code); }catch(e){}
@@ -1192,7 +1204,7 @@ function updateStuUI(){
   for(const pr of profiles){
     const row=document.createElement('div');
     row.className='stu-row'+(pr.code===curCode?' cur':'');
-    row.innerHTML=`<b>${pr.name}</b><span class="code num">${pr.code}</span>`;
+    row.innerHTML=`<b>${esc(pr.name)}</b><span class="code num">${pr.code}</span>`;
     row.onclick=()=> setCur(pr.code);
     const x=document.createElement('button'); x.textContent='✕'; x.className='stu-x';
     x.onclick=e=>{
@@ -1205,7 +1217,7 @@ function updateStuUI(){
     row.appendChild(x); el.appendChild(row);
   }
   $('syncHint').innerHTML = p
-    ? `<b>${p.name}</b> 的同步碼:<b class="num" style="font-size:16px;color:var(--brass);letter-spacing:.2em">${p.code}</b><br>`
+    ? `<b>${esc(p.name)}</b> 的同步碼:<b class="num" style="font-size:16px;color:var(--brass);letter-spacing:.2em">${p.code}</b><br>`
       +`在家打開同一個網站,輸入姓名和這組碼,就能接續紀錄。`
       +(FIREBASE_CONFIG ? '' : '<br>⚠ 雲端尚未設定,目前紀錄只存這台裝置。')
     : '訪客模式:紀錄只存這台裝置、不跟隨學生。';
@@ -1247,7 +1259,7 @@ $('bpm').oninput = e=>{
   const v=+e.target.value; $('bpmVal').textContent=v; $('hdBpm').textContent=v;
   if(running) pendingBpm=v; else bpm=v;
 };
-$('swing').oninput = e=>{ swing=+e.target.value; $('swVal').textContent=swing+'%'; drawRing(); };
+$('swing').oninput = e=>{ swing=+e.target.value; $('swVal').textContent=swing+'%'; needDraw=true; };
 $('sens').oninput = e=>{
   const v=+e.target.value;
   $('sensVal').textContent = v<=3?'低':v<=7?'中':'高';
@@ -1279,7 +1291,10 @@ async function startStop(){
   resetStats();
   expected=[]; ripples=[];
   bpm=+$('bpm').value; barDur=4*60/bpm; stepIdx=0;
-  barStart = ctx.currentTime + 0.5;
+  // Count-in:先數一小節純節拍器(1 2 3 4),學生有預備拍才進節奏
+  const t0 = ctx.currentTime + 0.35;
+  for(let k=0;k<4;k++) clickSound(t0 + k*barDur/4, k===0);
+  barStart = t0 + barDur;
   running=true; setGoUI(); requestWake();
   schedTimer=setInterval(scheduler, TICK);
 }
@@ -1288,6 +1303,7 @@ function stopRun(){
   const was=running;
   running=false; clearInterval(schedTimer); setGoUI(); releaseWake();
   document.querySelectorAll('.step').forEach(el=>el.classList.remove('cur'));
+  needDraw=true;
   if(was) commitRecord();   // 每次練習結束自動記錄
 }
 
@@ -1315,6 +1331,8 @@ if(matchMedia('(pointer:coarse)').matches){
 if(matchMedia('(max-width:1020px)').matches){
   document.querySelectorAll('details.sec').forEach(d=>{ if(!d.dataset.keep) d.open=false; });
 }
+// 還原本機存的校準值顯示
+$('hdLat').textContent = offsets[inputSrc] ? (offsets[inputSrc]*1000).toFixed(0)+'ms' : '--';
 
 /* ---------- PWA:service worker ---------- */
 if('serviceWorker' in navigator && location.protocol!=='file:'){
@@ -1324,7 +1342,9 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
 /* ---------- 主迴圈 ---------- */
 let camFc=0;
 function raf(){
-  drawRing(); drawOffset();
+  if(running || ripples.length || needDraw){   // 閒置時不重繪,省電
+    drawRing(); drawOffset(); needDraw=false;
+  }
   if(++camFc>=2){ camFc=0; camTick(); }   // 攝影機 ~30fps 即可
   requestAnimationFrame(raf);
 }

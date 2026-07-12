@@ -1,9 +1,10 @@
 /* SWING LAB service worker — network-first(有網路抓最新,離線回退快取) */
-const CACHE = 'swinglab-v1';
+const CACHE = 'swinglab-v2';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'
