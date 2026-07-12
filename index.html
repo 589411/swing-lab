@@ -279,6 +279,16 @@ body{touch-action:manipulation}
 
   <!-- ============ 中:鼓皮節拍環 ============ -->
   <div class="stage">
+    <!-- SVG 鼓組視覺化 -->
+    <svg id="drumkit" viewBox="0 0 500 420" style="max-width:500px;margin:0 auto 16px;display:block">
+      <defs>
+        <radialGradient id="gradCymbal"><stop offset="20%" stop-color="#fff" stop-opacity=".3"/><stop offset="100%" stop-color="#000" stop-opacity=".1"/></radialGradient>
+        <radialGradient id="gradDrum"><stop offset="30%" stop-color="#fff" stop-opacity=".25"/><stop offset="100%" stop-color="#000" stop-opacity=".2"/></radialGradient>
+        <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity=".4"/></filter>
+      </defs>
+      <!-- 鼓件會由 JS 動態生成 -->
+    </svg>
+
     <div class="judge-pop">
       <div id="judgeTxt">PERFECT</div>
       <div id="judgeMs"></div>
@@ -442,10 +452,14 @@ try{ Object.assign(offsets, JSON.parse(localStorage.getItem('swinglab_offsets'))
 let bpm = 90, swing = 0;
 let grid = 16;                          // 16=十六分音符 / 12=三連音(每拍3格,爵士)
 const VOICES = [
-  {id:'ride', name:'RIDE 鑔片', col:'#D9A441'},
-  {id:'hh',   name:'HH 踩鑔',  col:'#7fa8ec'},
-  {id:'snare',name:'SN 小鼓',  col:'#EDE2CB'},
-  {id:'kick', name:'KICK 大鼓', col:'#E4502E'}
+  {id:'crash', name:'CRASH 鈸',  col:'#FFB84D', x:120, y:80,  r:55},  // 左上 Crash 鈸
+  {id:'ride',  name:'RIDE 鑔片', col:'#D9A441', x:420, y:100, r:60},  // 右上 Ride 鈸
+  {id:'hh',    name:'HH 踩鑔',   col:'#7fa8ec', x:80,  y:180, r:40},  // 左 Hi-Hat
+  {id:'tom1',  name:'HIGH TOM',  col:'#A67C52', x:280, y:120, r:45},  // 中上 High Tom
+  {id:'tom2',  name:'MID TOM',   col:'#8B6442', x:360, y:180, r:50},  // 右中 Mid Tom
+  {id:'snare', name:'SN 小鼓',   col:'#EDE2CB', x:200, y:220, r:50},  // 中央 Snare
+  {id:'tom3',  name:'FLOOR TOM', col:'#6B4C32', x:380, y:280, r:60},  // 右下 Floor Tom
+  {id:'kick',  name:'KICK 大鼓', col:'#E4502E', x:240, y:360, r:35}   // 下方 Kick 踏板
 ];
 const VOICE_IDS = VOICES.map(v=>v.id);
 let pattern = {};                       // voice id → Array(grid) 0 off/1 on/2 accent
@@ -549,12 +563,16 @@ function toneHit(t, dur, type, f0, f1, vol){
   g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+dur+0.02);
 }
-/* 四聲部音色(WebAudio 合成)。練習聲部走 gdVol,背景聲部走 bgVol */
+/* 八聲部音色(WebAudio 合成)。練習聲部走 gdVol,背景聲部走 bgVol */
 function drumSound(voice, t, accent, isPractice){
   const v = (isPractice ? $('gdVol').value : $('bgVol').value)/100;
   if(v<=0) return;
   const a = accent?1.35:1;
   switch(voice){
+    case 'crash':  // Crash 鈸:高頻噪音 + 長延音
+      noiseHit(t, accent?1.2:.9, 'highpass', 5500, .6, .22*v*a);
+      toneHit(t, .8, 'square', 4800, null, .035*v*a);
+      break;
     case 'ride':   // 金屬 ping + 鑔面延音
       toneHit(t, .16, 'square', 5300, null, .045*v*a);
       noiseHit(t, accent?.5:.32, 'highpass', 6500, .7, .15*v*a);
@@ -562,9 +580,21 @@ function drumSound(voice, t, accent, isPractice){
     case 'hh':     // 左腳踩鑔 chick:極短噪音
       noiseHit(t, .04, 'highpass', 7800, 1, .3*v*a);
       break;
+    case 'tom1':   // High Tom:高音鼓腔
+      toneHit(t, .18, 'sine', 220, 140, .65*v*a);
+      noiseHit(t, .08, 'bandpass', 2200, .7, .2*v*a);
+      break;
+    case 'tom2':   // Mid Tom:中音鼓腔
+      toneHit(t, .22, 'sine', 165, 100, .7*v*a);
+      noiseHit(t, .09, 'bandpass', 1600, .7, .22*v*a);
+      break;
     case 'snare':  // 響線噪音 + 鼓腔音
       noiseHit(t, .11, 'bandpass', 1800, .8, .5*v*a);
       toneHit(t, .07, 'triangle', 186, 140, .32*v*a);
+      break;
+    case 'tom3':   // Floor Tom:低音鼓腔
+      toneHit(t, .28, 'sine', 120, 70, .8*v*a);
+      noiseHit(t, .11, 'bandpass', 1200, .7, .25*v*a);
       break;
     case 'kick':   // 正弦下潛(feathering 輕觸感)
       toneHit(t, .13, 'sine', 105, 42, .85*v*a);
@@ -1333,6 +1363,65 @@ if(matchMedia('(max-width:1020px)').matches){
 }
 // 還原本機存的校準值顯示
 $('hdLat').textContent = offsets[inputSrc] ? (offsets[inputSrc]*1000).toFixed(0)+'ms' : '--';
+
+/* ---------- SVG 鼓組視覺化初始化 ---------- */
+const drumkitSvg = $('drumkit');
+VOICES.forEach(v => {
+  const isCymbal = ['crash','ride','hh'].includes(v.id);
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('data-voice', v.id);
+  g.style.cursor = 'pointer';
+
+  // 鼓件圓形
+  const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circ.setAttribute('cx', v.x);
+  circ.setAttribute('cy', v.y);
+  circ.setAttribute('r', v.r);
+  circ.setAttribute('fill', v.col);
+  circ.setAttribute('fill-opacity', isCymbal ? '0.5' : '0.7');
+  circ.setAttribute('stroke', '#171310');
+  circ.setAttribute('stroke-width', '2');
+  circ.setAttribute('filter', 'url(#shadow)');
+  circ.style.transition = 'all 0.1s';
+
+  // 光暈效果
+  const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  glow.setAttribute('cx', v.x);
+  glow.setAttribute('cy', v.y);
+  glow.setAttribute('r', v.r);
+  glow.setAttribute('fill', 'url(' + (isCymbal ? '#gradCymbal' : '#gradDrum') + ')');
+  glow.setAttribute('pointer-events', 'none');
+
+  // 文字標籤
+  const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  txt.setAttribute('x', v.x);
+  txt.setAttribute('y', v.y + 5);
+  txt.setAttribute('text-anchor', 'middle');
+  txt.setAttribute('font-size', v.r > 50 ? '14' : '12');
+  txt.setAttribute('font-weight', 'bold');
+  txt.setAttribute('fill', isCymbal ? '#171310' : '#171310');
+  txt.setAttribute('opacity', '0.8');
+  txt.setAttribute('pointer-events', 'none');
+  txt.textContent = v.name.replace(/\s.*/, ''); // 只顯示第一個詞
+
+  g.appendChild(circ);
+  g.appendChild(glow);
+  g.appendChild(txt);
+  drumkitSvg.appendChild(g);
+
+  // 點擊觸發音色
+  g.addEventListener('click', () => {
+    ensureCtx();
+    drumSound(v.id, ctx.currentTime, false, true);
+    // 打擊動畫
+    circ.setAttribute('r', v.r * 1.15);
+    circ.setAttribute('fill-opacity', isCymbal ? '0.8' : '1');
+    setTimeout(() => {
+      circ.setAttribute('r', v.r);
+      circ.setAttribute('fill-opacity', isCymbal ? '0.5' : '0.7');
+    }, 100);
+  });
+});
 
 /* ---------- PWA:service worker ---------- */
 if('serviceWorker' in navigator && location.protocol!=='file:'){
