@@ -272,6 +272,7 @@ body{touch-action:manipulation}
       <button class="pad r" id="padR">R<small>右手</small></button>
     </div>
     <div class="bpm-flash" id="bpmFlash">+5 BPM!</div>
+    <div class="bpm-flash" id="recFlash" style="bottom:8%;color:#7fa8ec">★ 新紀錄!</div>
   </div>
 
   <!-- ============ 右:成績 ============ -->
@@ -299,6 +300,13 @@ body{touch-action:manipulation}
     <div class="sec">
       <div class="sec-t">拍點傾向(搶拍/拖拍)</div>
       <canvas id="offsetCv" width="230" height="64"></canvas>
+    </div>
+    <div class="sec">
+      <div class="sec-t">練習紀錄 🎯</div>
+      <div class="stat-row"><span>最佳準確率</span><b class="c-g num" id="recAcc">--</b></div>
+      <div class="stat-row"><span>達成速度</span><b class="c-p num" id="recBpm">--</b></div>
+      <div class="stat-row"><span>練習次數</span><b class="num" id="recN">0</b></div>
+      <button class="btn btn-ghost" id="recAllBtn" style="padding:8px;font-size:12px;margin-top:10px">📋 全部紀錄</button>
     </div>
   </div>
 </div>
@@ -339,6 +347,19 @@ body{touch-action:manipulation}
   <div class="seq-scroll">
     <div id="seqRows"></div>
     <div class="beatnum" id="beatnum"></div>
+  </div>
+</div>
+
+<!-- ============ 練習紀錄 ============ -->
+<div class="modal" id="recModal">
+  <div class="mcard" style="max-width:560px">
+    <h3>📋 練習紀錄</h3>
+    <div id="recTable" style="max-height:50vh;overflow:auto;font-size:12px;line-height:1.7"></div>
+    <div class="mrow">
+      <button class="btn btn-ghost" id="recClear" style="font-size:12px">清除全部</button>
+      <button class="btn btn-ghost" id="recCsv" style="font-size:12px">匯出 CSV</button>
+      <button class="btn btn-go" id="recClose">關閉</button>
+    </div>
   </div>
 </div>
 
@@ -394,6 +415,8 @@ let pattern = {};                       // voice id → Array(grid) 0 off/1 on/2
 VOICE_IDS.forEach(v=> pattern[v]=new Array(16).fill(0));
 let sticking = new Array(16).fill(''); // 手序(顯示於小鼓聲部)
 let practiceVoice = 'snare';           // 🎯 隔離練習:只判定此聲部,其餘為背景
+const REC_KEY='swinglab_records';      // 練習紀錄 localStorage key
+let currentPreset='eighth';            // 目前節奏型(紀錄用)
 let barStart = 0, barDur = 0, stepIdx = 0;
 let pendingBpm = null;
 let expected = [];              // {time, step, judged, result}
@@ -917,7 +940,7 @@ function buildSeq(){
     const lb=document.createElement('button');
     lb.className='vlabel'; lb.innerHTML=`<span class="dot"></span>${vinfo.name}`;
     lb.title='點擊=設為練習聲部🎯';
-    lb.onclick=()=>{ practiceVoice=vinfo.id; renderGrid(); };
+    lb.onclick=()=>{ practiceVoice=vinfo.id; renderGrid(); updateRecPanel(); };
     row.appendChild(lb);
     for(let i=0;i<grid;i++){
       const b=document.createElement('button');
@@ -925,8 +948,8 @@ function buildSeq(){
       b.innerHTML='<span class="stick"></span>';
       b.onclick=()=>{
         pattern[vinfo.id][i]=(pattern[vinfo.id][i]+1)%3;
-        $('preset').value='custom';
-        renderGrid();
+        $('preset').value='custom'; currentPreset='custom';
+        renderGrid(); updateRecPanel();
       };
       row.appendChild(b);
     }
@@ -963,20 +986,86 @@ function setGrid(n){
   sticking=new Array(grid).fill('');
   applyGridUI(); buildSeq(); renderGrid();
 }
-$('g16').onclick=()=>{ if(grid!==16){ setGrid(16); $('preset').value='custom'; } };
-$('g12').onclick=()=>{ if(grid!==12){ setGrid(12); $('preset').value='custom'; } };
+$('g16').onclick=()=>{ if(grid!==16){ setGrid(16); $('preset').value='custom'; currentPreset='custom'; updateRecPanel(); } };
+$('g12').onclick=()=>{ if(grid!==12){ setGrid(12); $('preset').value='custom'; currentPreset='custom'; updateRecPanel(); } };
 function loadPreset(key){
   const pr=PRESETS[key]; if(!pr) return;
   if(running) stopRun();
+  currentPreset=key;
   grid=pr.grid;
   VOICE_IDS.forEach(v=> pattern[v]=(pr.v[v]||'').padEnd(grid,'0').split('').map(Number));
   sticking=(pr.s||'').padEnd(grid,' ').split('').slice(0,grid);
   swing=pr.sw||0; $('swing').value=swing;
   practiceVoice=pr.pv||'snare';
-  applyGridUI(); buildSeq(); renderGrid();
+  applyGridUI(); buildSeq(); renderGrid(); updateRecPanel();
 }
 $('preset').onchange = e=>{ if(e.target.value!=='custom') loadPreset(e.target.value); };
 loadPreset('eighth');
+
+/* =====================================================================
+   練習紀錄:節奏型×練習聲部 → 最佳準確率/BPM/次數
+   (localStorage;資料結構預留之後接 Firebase 同步)
+===================================================================== */
+function loadRecs(){ try{ return JSON.parse(localStorage.getItem(REC_KEY))||{}; }catch(e){ return {}; } }
+function saveRecs(r){ try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); }catch(e){} }
+function recId(){ return currentPreset+'|'+practiceVoice; }
+function presetName(k){ const o=$('preset').querySelector(`option[value="${k}"]`); return o?o.textContent:'自訂'; }
+function voiceName(v){ const x=VOICES.find(a=>a.id===v); return x?x.name:v; }
+function updateRecPanel(){
+  const r=loadRecs()[recId()];
+  $('recAcc').textContent = r? r.bestAcc.toFixed(1)+'%' : '--';
+  $('recBpm').textContent = r? r.bestAccBpm+' BPM' : '--';
+  $('recN').textContent = r? r.sessions : 0;
+}
+function commitRecord(){
+  if(totalJudged<8) return;   // 樣本太少不記(至少約一小節)
+  const acc = 100*totalPts/(100*totalJudged);
+  const recs=loadRecs(), id=recId();
+  const r = recs[id] || {bestAcc:0, bestAccBpm:0, maxBpm:0, sessions:0, lastTs:0};
+  r.sessions++; r.lastTs=Date.now();
+  let newBest=false;
+  if(acc>r.bestAcc){ r.bestAcc=acc; r.bestAccBpm=bpm; newBest=true; }
+  if(acc>=85 && bpm>r.maxBpm) r.maxBpm=bpm;
+  recs[id]=r; saveRecs(recs); updateRecPanel();
+  if(newBest){ const f=$('recFlash'); f.style.opacity=1; setTimeout(()=>f.style.opacity=0, 1600); }
+}
+function renderRecTable(){
+  const recs=loadRecs();
+  const ids=Object.keys(recs).sort((a,b)=>recs[b].lastTs-recs[a].lastTs);
+  if(!ids.length){
+    $('recTable').innerHTML='<p style="color:var(--dim)">還沒有紀錄。完成一次練習(至少 8 個判定)就會自動記錄。</p>';
+    return;
+  }
+  let h='<table style="width:100%;border-collapse:collapse"><tr style="color:var(--brass);text-align:left">'
+       +'<th style="padding:4px 6px">節奏型</th><th>聲部</th>'
+       +'<th style="text-align:right">最佳</th><th style="text-align:right">BPM</th><th style="text-align:right">次數</th></tr>';
+  for(const id of ids){
+    const [p,v]=id.split('|'), r=recs[id];
+    h+=`<tr style="border-top:1px dashed var(--ink)"><td style="padding:4px 6px">${presetName(p)}</td>`
+      +`<td>${voiceName(v)}</td><td style="text-align:right" class="num">${r.bestAcc.toFixed(1)}%</td>`
+      +`<td style="text-align:right" class="num">${r.bestAccBpm}</td>`
+      +`<td style="text-align:right" class="num">${r.sessions}</td></tr>`;
+  }
+  $('recTable').innerHTML=h+'</table>';
+}
+$('recAllBtn').onclick=()=>{ renderRecTable(); $('recModal').classList.add('show'); };
+$('recClose').onclick=()=>$('recModal').classList.remove('show');
+$('recClear').onclick=()=>{
+  if(confirm('確定清除所有練習紀錄?此動作無法復原。')){
+    localStorage.removeItem(REC_KEY); renderRecTable(); updateRecPanel();
+  }
+};
+$('recCsv').onclick=()=>{
+  const recs=loadRecs();
+  let csv='﻿節奏型,聲部,最佳準確率%,達成BPM,最高BPM(≥85%),練習次數,最後練習\n';
+  for(const id of Object.keys(recs)){
+    const [p,v]=id.split('|'), r=recs[id];
+    csv+=`"${presetName(p)}","${voiceName(v)}",${r.bestAcc.toFixed(1)},${r.bestAccBpm},${r.maxBpm},${r.sessions},${new Date(r.lastTs).toLocaleDateString()}\n`;
+  }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='swinglab_records.csv'; a.click(); URL.revokeObjectURL(a.href);
+};
 
 /* =====================================================================
    控制綁定
@@ -1035,8 +1124,10 @@ async function startStop(){
 }
 goBtns.forEach(b=> b.onclick = startStop);
 function stopRun(){
+  const was=running;
   running=false; clearInterval(schedTimer); setGoUI(); releaseWake();
   document.querySelectorAll('.step').forEach(el=>el.classList.remove('cur'));
+  if(was) commitRecord();   // 每次練習結束自動記錄
 }
 
 /* ---------- 手動輸入(打擊墊 / 空白鍵 / 點鼓面) ---------- */
