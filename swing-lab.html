@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#171310">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SWING LAB — 爵士鼓節奏訓練場</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#171310;        /* 舞台黑(暖) */
+  --smoke:#241D18;      /* 煙燻棕 */
+  --paper:#F1E7D3;      /* 鼓皮米白 */
+  --brass:#D9A441;      /* 銅鈸金 */
+  --blue:#2F6FD6;       /* Blue Note 藍 */
+  --coral:#E4502E;      /* 警示朱紅 */
+  --dim:#8C7F6E;
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--ink);color:var(--paper);font-family:'Noto Sans TC',sans-serif;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none}
+.num{font-family:'Anton',sans-serif;letter-spacing:.02em}
+
+/* ---------- Header:Blue Note 色塊排版 ---------- */
+header{display:flex;align-items:stretch;border-bottom:3px solid var(--paper)}
+.hd-block{padding:14px 20px;display:flex;flex-direction:column;justify-content:center}
+.hd-blue{background:var(--blue);color:var(--paper)}
+.hd-title{font-family:'Anton',sans-serif;font-size:clamp(26px,4vw,40px);line-height:.95;letter-spacing:.03em}
+.hd-sub{font-size:12px;font-weight:700;letter-spacing:.35em;margin-top:6px;color:rgba(241,231,211,.85)}
+.hd-brass{background:var(--brass);color:var(--ink);font-weight:900;writing-mode:vertical-rl;font-size:11px;letter-spacing:.3em;padding:10px 8px;display:flex;align-items:center}
+.hd-info{margin-left:auto;padding:14px 20px;display:flex;gap:26px;align-items:center}
+.hd-stat{text-align:right}
+.hd-stat .lb{font-size:10px;letter-spacing:.25em;color:var(--dim);font-weight:700}
+.hd-stat .vl{font-family:'Anton',sans-serif;font-size:30px;color:var(--brass)}
+
+/* ---------- Layout ---------- */
+.main{display:grid;grid-template-columns:290px 1fr 250px;gap:0;min-height:calc(100vh - 220px)}
+@media(max-width:1020px){
+  .main{grid-template-columns:1fr}
+  .stage{order:-2}
+  .panel-r{order:-1;border-left:none!important;border-top:2px solid var(--smoke)}
+  .panel-l{border-right:none;border-top:2px solid var(--smoke)}
+}
+@media(max-width:640px){
+  .grid16{grid-template-columns:repeat(8,1fr)}
+  .beatnum,.stick{display:none}
+  .hd-brass{display:none}
+  .hd-title{font-size:24px}
+  .hd-block{padding:10px 14px}
+  .hd-info{padding:10px 12px;gap:14px}
+  .hd-stat .vl{font-size:22px}
+  .stage{padding:10px 8px 4px}
+  #ring{max-width:min(400px,86vw)}
+  #judgeTxt{font-size:32px}
+  .pad{padding:min(9vh,76px) 0;font-size:38px}
+  .panel{padding:14px 14px 18px}
+  .seq-wrap{padding:12px 12px 16px}
+}
+
+/* ---------- 收合面板(手機) ---------- */
+summary.sec-t{cursor:pointer;user-select:none;-webkit-user-select:none}
+summary.sec-t::-webkit-details-marker{display:none}
+summary.sec-t::before{content:"▸";color:var(--dim)}
+details[open]>summary.sec-t::before{content:"▾"}
+
+/* ---------- 手機固定開始鈕 ---------- */
+.go-dock{display:none}
+@media(max-width:1020px){
+  .go-dock{display:block;position:fixed;left:0;right:0;bottom:0;z-index:40;
+    padding:8px 14px calc(10px + env(safe-area-inset-bottom));
+    background:linear-gradient(transparent, rgba(23,19,16,.94) 35%)}
+  .go-dock .btn{margin:0;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  body{padding-bottom:84px}
+  .main{min-height:auto}
+}
+.panel{padding:18px 18px 24px}
+.panel-l{border-right:2px solid var(--smoke)}
+.panel-r{border-left:2px solid var(--smoke)}
+.sec{margin-bottom:20px}
+.sec-t{font-size:11px;font-weight:900;letter-spacing:.3em;color:var(--brass);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sec-t::after{content:"";flex:1;height:1px;background:var(--smoke)}
+
+/* ---------- Controls ---------- */
+.mode-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.mode-btn{background:var(--smoke);color:var(--paper);padding:9px 4px;border-radius:6px;font-size:12px;font-weight:700;border:2px solid transparent;transition:.15s}
+.mode-btn.on{border-color:var(--brass);color:var(--brass);background:#2e2117}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.seg .mode-btn.on{border-color:var(--blue);color:#9fc0f2;background:#1a2233}
+label.sl{display:flex;justify-content:space-between;font-size:13px;font-weight:500;margin:12px 0 4px}
+label.sl b{font-family:'Anton',sans-serif;font-weight:400;color:var(--brass);font-size:15px}
+input[type=range]{width:100%;accent-color:var(--brass);height:22px}
+.btn{width:100%;padding:12px;border-radius:var(--radius);font-size:15px;font-weight:900;letter-spacing:.1em;margin-top:8px;transition:.15s}
+.btn-go{background:var(--blue);color:var(--paper)}
+.btn-go.playing{background:var(--coral)}
+.btn-ghost{background:transparent;border:2px solid var(--smoke);color:var(--paper);font-weight:700}
+.btn-ghost:hover{border-color:var(--brass)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer}
+.chk input{accent-color:var(--brass);width:16px;height:16px}
+select{width:100%;background:var(--smoke);color:var(--paper);border:none;padding:10px;border-radius:6px;font-size:14px;font-family:inherit}
+.micbar{height:8px;background:var(--smoke);border-radius:4px;overflow:hidden;margin-top:8px}
+.micbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brass),var(--coral));transition:width .05s}
+.hint{font-size:11px;color:var(--dim);line-height:1.6;margin-top:8px}
+.hint b{color:var(--brass)}
+
+/* ---------- Ring stage ---------- */
+.stage{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 10px;position:relative}
+#ring{max-width:min(540px,92vw);width:100%;aspect-ratio:1;touch-action:manipulation}
+.judge-pop{position:absolute;top:16%;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none}
+#judgeTxt{font-family:'Anton',sans-serif;font-size:44px;letter-spacing:.05em;opacity:0;transition:opacity .1s}
+#judgeMs{font-size:13px;font-weight:700;color:var(--dim);letter-spacing:.15em}
+.bpm-flash{position:absolute;bottom:14%;left:50%;transform:translateX(-50%);font-family:'Anton',sans-serif;font-size:26px;color:var(--brass);opacity:0;transition:opacity .3s;pointer-events:none}
+
+/* ---------- Right stats ---------- */
+.score-big{font-family:'Anton',sans-serif;font-size:52px;color:var(--paper);line-height:1}
+.combo-big{font-family:'Anton',sans-serif;font-size:40px;color:var(--brass)}
+.stat-row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--smoke)}
+.stat-row b{font-family:'Anton',sans-serif;font-weight:400;font-size:16px}
+.c-p{color:#7fa8ec}.c-g{color:var(--brass)}.c-o{color:var(--paper)}.c-x{color:var(--coral)}
+#offsetCv{width:100%;height:64px;display:block}
+.acc-big{font-family:'Anton',sans-serif;font-size:34px;color:var(--blue)}
+
+/* ---------- Sequencer ---------- */
+.seq-wrap{border-top:3px solid var(--paper);background:var(--smoke);padding:16px 18px 22px}
+.seq-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.seq-head .sec-t{margin:0}
+.seq-head .sec-t::after{display:none}
+.seq-head select{width:auto;min-width:200px;background:var(--ink)}
+.grid16{display:grid;grid-template-columns:repeat(16,1fr);gap:5px;max-width:1100px}
+.step{aspect-ratio:1/1.15;border-radius:6px;background:#1b1611;border:2px solid #33291f;position:relative;transition:.1s;min-width:0}
+.step.beat1{border-left-width:4px;border-left-color:var(--dim)}
+.step.on{background:var(--brass);border-color:var(--brass)}
+.step.acc{background:var(--coral);border-color:var(--coral)}
+.step.cur{outline:3px solid var(--paper);outline-offset:1px}
+.stick{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:11px;font-weight:900;color:var(--dim)}
+.beatnum{display:grid;grid-template-columns:repeat(16,1fr);gap:5px;max-width:1100px;margin-top:26px}
+.beatnum span{text-align:center;font-size:10px;color:var(--dim);font-weight:700}
+
+/* ---------- Camera ---------- */
+#camBox{display:none;margin-top:10px}
+#camCv{width:100%;border-radius:8px;background:#000}
+.lr-bars{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+.lr-bars .bb{height:10px;background:var(--ink);border-radius:5px;overflow:hidden}
+.lr-bars .bb i{display:block;height:100%;width:0;background:var(--blue)}
+.lr-bars .bb.r i{background:var(--brass)}
+.lr-lb{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);font-weight:700;letter-spacing:.2em}
+
+/* ---------- 觸控打擊墊 ---------- */
+body{touch-action:manipulation}
+.pads{display:none;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:min(540px,92vw);margin-top:14px}
+.pads.show{display:grid}
+.pad{padding:32px 0;border-radius:14px;font-family:'Anton',sans-serif;font-size:32px;letter-spacing:.1em;
+  background:#1a2233;color:#9fc0f2;border:3px solid var(--blue);
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .05s}
+.pad.r{background:#2e2517;color:var(--brass);border-color:var(--brass)}
+.pad:active{transform:scale(.95)}
+.pad small{display:block;font-family:'Noto Sans TC',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3em;margin-top:2px}
+
+/* ---------- Modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(10,8,6,.86);display:none;align-items:center;justify-content:center;z-index:50}
+.modal.show{display:flex}
+.mcard{background:var(--smoke);border:3px solid var(--brass);border-radius:14px;max-width:440px;width:92%;padding:28px}
+.mcard h3{font-size:20px;font-weight:900;color:var(--brass);margin-bottom:10px;letter-spacing:.05em}
+.mcard p{font-size:14px;line-height:1.8;color:var(--paper)}
+.mcard .big-ms{font-family:'Anton',sans-serif;font-size:56px;color:var(--blue);text-align:center;margin:14px 0}
+.mrow{display:flex;gap:10px;margin-top:18px}
+.mrow .btn{margin:0}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd-block hd-blue">
+    <div class="hd-title">SWING LAB</div>
+    <div class="hd-sub">爵士鼓節奏訓練場</div>
+  </div>
+  <div class="hd-brass">RHYTHM&nbsp;·&nbsp;GROOVE&nbsp;·&nbsp;TIME</div>
+  <div class="hd-info">
+    <div class="hd-stat"><div class="lb">BPM</div><div class="vl num" id="hdBpm">90</div></div>
+    <div class="hd-stat"><div class="lb">延遲補償</div><div class="vl num" id="hdLat">--</div></div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ============ 左:控制 ============ -->
+  <div class="panel panel-l">
+    <details class="sec" open>
+      <summary class="sec-t">練習情境</summary>
+      <div class="mode-row">
+        <button class="mode-btn on" data-mode="pad">打點板</button>
+        <button class="mode-btn" data-mode="kit">真鼓組</button>
+        <button class="mode-btn" data-mode="air">空手/桌面</button>
+      </div>
+    </details>
+
+    <details class="sec" open>
+      <summary class="sec-t">輸入來源</summary>
+      <div class="seg">
+        <button class="mode-btn on" data-src="mic">🎤 麥克風</button>
+        <button class="mode-btn" data-src="tap">⌨ 空白鍵/點擊</button>
+      </div>
+      <div class="micbar"><i id="micLv"></i></div>
+      <label class="sl">偵測靈敏度 <b id="sensVal">中</b></label>
+      <input type="range" id="sens" min="1" max="10" value="5">
+      <button class="btn btn-ghost" id="calBtn">⏱ 延遲校準精靈</button>
+      <div class="hint">請戴<b>耳機</b>聽節拍器,避免喇叭聲被麥克風誤判成打擊。<b>iPhone 記得關掉側邊靜音鍵</b>,否則聽不到節拍器。</div>
+    </details>
+
+    <details class="sec" open data-keep="1">
+      <summary class="sec-t">速度與律動</summary>
+      <label class="sl">速度 <b><span id="bpmVal">90</span> BPM</b></label>
+      <input type="range" id="bpm" min="40" max="240" value="90">
+      <label class="sl">Swing 搖擺量 <b id="swVal">0%</b></label>
+      <input type="range" id="swing" min="0" max="100" value="0">
+      <label class="chk"><input type="checkbox" id="autoUp"> 自動加速(每小節 ≥90% 就 +5 BPM)</label>
+    </details>
+
+    <details class="sec" open>
+      <summary class="sec-t">聲音</summary>
+      <label class="sl">節拍器音量 <b id="mvVal">70</b></label>
+      <input type="range" id="metVol" min="0" max="100" value="70">
+      <label class="sl">引導音音量 <b id="gvVal">50</b></label>
+      <input type="range" id="gdVol" min="0" max="100" value="50">
+      <div class="hint">引導音會示範節奏型。練熟後把它關成 0,只留節拍器——這才是真正的考試模式。</div>
+    </details>
+
+    <details class="sec" open>
+      <summary class="sec-t">動作教練(攝影機)</summary>
+      <label class="chk"><input type="checkbox" id="camOn"> 開啟左右手動作平衡偵測</label>
+      <div id="camBox">
+        <canvas id="camCv" width="240" height="180"></canvas>
+        <div class="lr-bars">
+          <div class="bb"><i id="barL"></i></div>
+          <div class="bb r"><i id="barR"></i></div>
+        </div>
+        <div class="lr-lb"><span>左手區</span><span>右手區</span></div>
+        <div class="hint">攝影機只評「動作品質」,不參與計時評分(30fps 的物理極限無法判斷毫秒級打點)。</div>
+      </div>
+    </details>
+
+    <button class="btn btn-go" id="goBtn">▶ 開始練習</button>
+  </div>
+
+  <!-- ============ 中:鼓皮節拍環 ============ -->
+  <div class="stage">
+    <div class="judge-pop">
+      <div id="judgeTxt">PERFECT</div>
+      <div id="judgeMs"></div>
+    </div>
+    <canvas id="ring" width="560" height="560"></canvas>
+    <div class="pads" id="pads">
+      <button class="pad" id="padL">L<small>左手</small></button>
+      <button class="pad r" id="padR">R<small>右手</small></button>
+    </div>
+    <div class="bpm-flash" id="bpmFlash">+5 BPM!</div>
+  </div>
+
+  <!-- ============ 右:成績 ============ -->
+  <div class="panel panel-r">
+    <div class="sec">
+      <div class="sec-t">分數</div>
+      <div class="score-big num" id="score">0</div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">連擊 COMBO</div>
+      <div><span class="combo-big num" id="combo">0</span>
+      <span style="font-size:12px;color:var(--dim)">最高 <b class="num" id="bestCombo" style="color:var(--paper)">0</b></span></div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">準確率</div>
+      <div class="acc-big num" id="acc">--</div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">判定統計</div>
+      <div class="stat-row"><span class="c-p">PERFECT ±30ms</span><b class="c-p num" id="nP">0</b></div>
+      <div class="stat-row"><span class="c-g">GREAT ±60ms</span><b class="c-g num" id="nG">0</b></div>
+      <div class="stat-row"><span class="c-o">GOOD ±100ms</span><b class="c-o num" id="nO">0</b></div>
+      <div class="stat-row"><span class="c-x">MISS</span><b class="c-x num" id="nM">0</b></div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">拍點傾向(搶拍/拖拍)</div>
+      <canvas id="offsetCv" width="230" height="64"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 底:節奏型編輯器 ============ -->
+<div class="seq-wrap">
+  <div class="seq-head">
+    <div class="sec-t">節奏型工作台</div>
+    <select id="preset">
+      <option value="sixteenth">十六分音符 · 單擊基本功</option>
+      <option value="eighth" selected>八分音符 · 穩定練習</option>
+      <option value="paradiddle">Paradiddle · RLRR LRLL</option>
+      <option value="swingride">Swing Ride · 爵士鑔片型</option>
+      <option value="shuffle">Shuffle · 藍調搖擺</option>
+      <option value="clave">Son Clave 3-2 · 拉丁</option>
+      <option value="custom">✏️ 自訂(點格子編輯)</option>
+    </select>
+    <span class="hint" style="margin:0">點格子切換:關 → <span style="color:var(--brass)">開</span> → <span style="color:var(--coral)">重音</span></span>
+  </div>
+  <div class="grid16" id="grid"></div>
+  <div class="beatnum">
+    <span>1</span><span>e</span><span>&amp;</span><span>a</span>
+    <span>2</span><span>e</span><span>&amp;</span><span>a</span>
+    <span>3</span><span>e</span><span>&amp;</span><span>a</span>
+    <span>4</span><span>e</span><span>&amp;</span><span>a</span>
+  </div>
+</div>
+
+<!-- ============ 手機固定開始鈕 ============ -->
+<div class="go-dock"><button class="btn btn-go" id="goBtn2">▶ 開始練習</button></div>
+
+<!-- ============ 校準精靈 ============ -->
+<div class="modal" id="calModal">
+  <div class="mcard">
+    <div id="calStep1">
+      <h3>STEP 1 · 環境噪音基準</h3>
+      <p>保持安靜 2 秒,我會量測背景噪音,自動設定偵測門檻。準備好就按開始。</p>
+      <div class="micbar" style="margin-top:14px"><i id="calLv"></i></div>
+      <div class="mrow"><button class="btn btn-ghost" id="calCancel1">取消</button><button class="btn btn-go" id="calFloorBtn">開始量測</button></div>
+    </div>
+    <div id="calStep2" style="display:none">
+      <h3>STEP 2 · 跟拍校準</h3>
+      <p>你會聽到 <b>12 下</b>喀噠聲(前 2 下暖身不計分)。麥克風模式:跟著<b>每一下同時打擊</b>;點擊模式:<b>點螢幕任何位置</b>或按空白鍵。不用求快,求「同時」。</p>
+      <div class="big-ms num" id="calCount">--</div>
+      <div class="mrow"><button class="btn btn-go" id="calTapBtn">開始跟拍</button></div>
+    </div>
+    <div id="calStep3" style="display:none">
+      <h3>STEP 3 · 校準結果</h3>
+      <p style="text-align:center">你的系統延遲補償值:</p>
+      <div class="big-ms num" id="calResult">-- ms</div>
+      <p id="calNote" style="font-size:12px;color:var(--dim)"></p>
+      <div class="mrow"><button class="btn btn-ghost" id="calRedo">重測</button><button class="btn btn-go" id="calDone">完成,套用</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   SWING LAB — 核心引擎
+   所有時間軸統一使用 audioContext.currentTime(單一時鐘原則)
+===================================================================== */
+const $ = id => document.getElementById(id);
+let ctx = null;                 // AudioContext
+let running = false;
+let offsets = {mic:0, tap:0};   // 秒。麥克風與觸控各自校準(觸控螢幕本身也有 30~70ms 延遲)
+
+/* ---------- 節奏狀態 ---------- */
+let bpm = 90, swing = 0;
+let pattern = new Array(16).fill(0);   // 0 off / 1 on / 2 accent
+let sticking = new Array(16).fill('');
+let barStart = 0, barDur = 0, stepIdx = 0;
+let pendingBpm = null;
+let expected = [];              // {time, step, judged, result}
+let schedTimer = null;
+const LOOKAHEAD = 0.12, TICK = 25;
+
+/* ---------- 成績 ---------- */
+let score=0, combo=0, bestCombo=0, nP=0,nG=0,nO=0,nM=0;
+let recentDeltas = [];          // 最近偏移(ms),畫傾向計
+let barExpected = 0, barHitPts = 0;   // 自動加速用
+let ripples = [];               // 視覺漣漪 {ang,t0,color}
+
+/* ---------- 模式 preset:靈敏度乘數 / 去抖動秒數 ---------- */
+const MODES = {
+  pad:{sens:5.0, deb:0.055, name:'打點板'},
+  kit:{sens:9.0, deb:0.050, name:'真鼓組'},
+  air:{sens:3.2, deb:0.090, name:'空手/桌面'}
+};
+let mode='pad', inputSrc='mic';
+
+/* ---------- 節奏型 preset ---------- */
+const PRESETS = {
+  sixteenth:{p:'1111111111111111', s:'RLRLRLRLRLRLRLRL', sw:0},
+  eighth:   {p:'2010101020101010', s:'R L R L R L R L ', sw:0},
+  paradiddle:{p:'2011201120112011', s:'RLRRLRLLRLRRLRLL', sw:0},
+  swingride:{p:'2000101020001010', s:'R   R L R   R L ', sw:66},
+  shuffle:  {p:'2010101020101010', s:'R L R L R L R L ', sw:66},
+  clave:    {p:'2001001000201000', s:'R  R  R   R R   ', sw:0}
+};
+
+/* =====================================================================
+   音訊:AudioContext / 節拍器 / 引導音
+===================================================================== */
+function ensureCtx(){
+  if(!ctx){ ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}); }
+  if(ctx.state==='suspended') ctx.resume();
+  return ctx;
+}
+function clickSound(t, accent){
+  const v = $('metVol').value/100; if(v<=0) return;
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type='square'; o.frequency.value = accent?1900:1300;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(0.5*v*(accent?1.3:1), t+0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.03);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.05);
+}
+let noiseBuf=null;
+function guideSound(t, accent){
+  const v = $('gdVol').value/100; if(v<=0) return;
+  if(!noiseBuf){
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate*0.06, ctx.sampleRate);
+    const d=noiseBuf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+  }
+  const s=ctx.createBufferSource(); s.buffer=noiseBuf;
+  const f=ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=accent?900:2600; f.Q.value=1.2;
+  const g=ctx.createGain(); g.gain.value=0.9*v*(accent?1.4:1);
+  s.connect(f).connect(g).connect(ctx.destination); s.start(t);
+}
+
+/* ---------- 步進時間(含 swing):8分音符反拍延後 ---------- */
+function stepTime(bStart, i, bDur, sw){
+  const beat = Math.floor(i/4), sub = i%4, beatDur = bDur/4;
+  let frac = sub/4;
+  if(sub===2) frac = 0.5 + (sw/100)*(2/3 - 0.5);   // 直拍0.5 → 三連音感2/3
+  return bStart + beat*beatDur + frac*beatDur;
+}
+
+/* ---------- 排程器 ---------- */
+function scheduler(){
+  const now = ctx.currentTime;
+  while(true){
+    const t = stepTime(barStart, stepIdx, barDur, swing);
+    if(t >= now + LOOKAHEAD) break;
+    // 節拍器:每拍頭
+    if(stepIdx%4===0) clickSound(t, stepIdx===0);
+    // 節奏型步
+    if(pattern[stepIdx]>0){
+      guideSound(t, pattern[stepIdx]===2);
+      expected.push({time:t, step:stepIdx, judged:false, result:''});
+      barExpected++;
+    }
+    stepIdx++;
+    if(stepIdx>=16){
+      stepIdx=0;
+      barStart += barDur;
+      onBarEnd();
+      if(pendingBpm){ bpm=pendingBpm; pendingBpm=null; }
+      barDur = 4*60/bpm;
+    }
+  }
+  // 清掃過期未判定 → MISS
+  for(const e of expected){
+    if(!e.judged && now - e.time > 0.18){ e.judged=true; e.result='M'; registerJudge('M', 0, e); }
+  }
+  expected = expected.filter(e => now - e.time < 3);
+}
+function onBarEnd(){
+  if($('autoUp').checked && barExpected>0){
+    const accBar = barHitPts/(100*barExpected);
+    if(accBar>=0.9 && bpm<240){
+      pendingBpm = Math.min(240, bpm+5);
+      $('bpm').value=pendingBpm; $('bpmVal').textContent=pendingBpm; $('hdBpm').textContent=pendingBpm;
+      const f=$('bpmFlash'); f.style.opacity=1; setTimeout(()=>f.style.opacity=0, 900);
+    }
+  }
+  barExpected=0; barHitPts=0;
+}
+
+/* =====================================================================
+   判定引擎
+===================================================================== */
+const PTS = {P:100,G:70,O:40,M:0};
+let totalJudged = 0, totalPts = 0;
+function judgeHit(rawT, hand){
+  const t = rawT - (offsets[inputSrc]||0);
+  let best=null, bestD=1e9;
+  for(const e of expected){
+    if(e.judged) continue;
+    const d = t - e.time;
+    if(Math.abs(d) < Math.abs(bestD) && Math.abs(d) <= 0.16){ best=e; bestD=d; }
+  }
+  if(!best){ addRipple(rawT, '#5a4f42'); return; }   // 多餘打擊:灰漣漪,不扣分
+  best.judged=true;
+  const ms = bestD*1000, a=Math.abs(ms);
+  let r = a<=30?'P': a<=60?'G': a<=100?'O':'M';
+  best.result=r;
+  let hint='';
+  if(hand){
+    const want=(sticking[best.step]||'').trim().toUpperCase();
+    if((want==='R'||want==='L') && want!==hand) hint = want==='R'?'· 手序:右':'· 手序:左';
+  }
+  registerJudge(r, ms, best, hint);
+}
+function registerJudge(r, ms, e, hint){
+  totalJudged++; totalPts += PTS[r]; barHitPts += PTS[r];
+  if(r==='P'){nP++;combo++;} else if(r==='G'){nG++;combo++;}
+  else if(r==='O'){nO++;combo++;} else {nM++;combo=0;}
+  bestCombo=Math.max(bestCombo,combo);
+  score += PTS[r] * (1 + Math.min(combo,50)*0.01);
+  if(r!=='M'){ recentDeltas.push(ms); if(recentDeltas.length>14) recentDeltas.shift(); }
+  showJudge(r, ms, hint);
+  addRipple(e.time + (offsets[inputSrc]||0), r==='P'?'#2F6FD6':r==='G'?'#D9A441':r==='O'?'#F1E7D3':'#E4502E');
+  updateStats();
+}
+const JLABEL={P:['PERFECT','#7fa8ec'],G:['GREAT','#D9A441'],O:['GOOD','#F1E7D3'],M:['MISS','#E4502E']};
+let judgeTimer=null;
+function showJudge(r, ms, hint){
+  const [txt,col]=JLABEL[r];
+  const jt=$('judgeTxt'); jt.textContent=txt; jt.style.color=col; jt.style.opacity=1;
+  $('judgeMs').textContent = (r==='M'?'': (ms<0?`搶拍 ${(-ms).toFixed(0)}ms`:`拖拍 ${ms.toFixed(0)}ms`)) + (hint?' '+hint:'');
+  clearTimeout(judgeTimer);
+  judgeTimer=setTimeout(()=>{jt.style.opacity=0;$('judgeMs').textContent='';}, 500);
+}
+function updateStats(){
+  $('score').textContent = Math.round(score);
+  $('combo').textContent = combo; $('bestCombo').textContent = bestCombo;
+  $('nP').textContent=nP;$('nG').textContent=nG;$('nO').textContent=nO;$('nM').textContent=nM;
+  $('acc').textContent = totalJudged? (100*totalPts/(100*totalJudged)).toFixed(1)+'%' : '--';
+}
+function resetStats(){
+  score=0;combo=0;bestCombo=0;nP=nG=nO=nM=0;totalJudged=0;totalPts=0;
+  recentDeltas=[];barExpected=0;barHitPts=0;updateStats();$('acc').textContent='--';
+}
+
+/* =====================================================================
+   麥克風 + AudioWorklet onset 偵測
+===================================================================== */
+const workletCode = `
+class OnsetProc extends AudioWorkletProcessor{
+  constructor(){super();this.env=0;this.floor=0.0008;this.sens=5;this.deb=0.055;
+    this.last=-1;this.armed=true;this.fc=0;
+    this.port.onmessage=e=>{const d=e.data;
+      if(d.floor!==undefined)this.floor=Math.max(d.floor,0.0003);
+      if(d.sens!==undefined)this.sens=d.sens;
+      if(d.deb!==undefined)this.deb=d.deb;};}
+  process(inputs){
+    const ch=inputs[0]&&inputs[0][0]; if(!ch)return true;
+    let s=0;for(let i=0;i<ch.length;i++)s+=ch[i]*ch[i];
+    const rms=Math.sqrt(s/ch.length);
+    this.env = rms>this.env? rms : this.env*0.994;
+    const thr=Math.max(this.floor*this.sens, 0.0045);
+    if(rms>thr && this.armed && currentTime-this.last>this.deb){
+      this.last=currentTime;this.armed=false;
+      this.port.postMessage({onset:currentTime,e:rms});}
+    if(rms<thr*0.35)this.armed=true;
+    if(++this.fc>=10){this.fc=0;this.port.postMessage({lv:this.env});}
+    return true;}}
+registerProcessor('onset',OnsetProc);`;
+
+let onsetNode=null, micReady=false, noiseFloor=0.0008;
+let calMode=null, calOnsets=[], calClicks=[], calLvSamples=[];
+async function initMic(){
+  if(micReady) return true;
+  try{
+    ensureCtx();
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    const src = ctx.createMediaStreamSource(stream);
+    const url = URL.createObjectURL(new Blob([workletCode],{type:'application/javascript'}));
+    await ctx.audioWorklet.addModule(url);
+    onsetNode = new AudioWorkletNode(ctx,'onset');
+    const mute = ctx.createGain(); mute.gain.value=0;
+    src.connect(onsetNode).connect(mute).connect(ctx.destination);
+    onsetNode.port.onmessage = e=>{
+      const d=e.data;
+      if(d.lv!==undefined){
+        $('micLv').style.width = Math.min(100, d.lv*1800)+'%';
+        if(calMode==='floor'){ calLvSamples.push(d.lv); $('calLv').style.width=Math.min(100,d.lv*1800)+'%'; }
+      }
+      if(d.onset!==undefined){
+        if(calMode==='tap') calOnsets.push(d.onset);
+        else if(running && inputSrc==='mic') judgeHit(d.onset);
+      }
+    };
+    applyDetectParams();
+    micReady=true; return true;
+  }catch(err){
+    alert('無法取得麥克風權限:'+err.message+'\n可先切換到「空白鍵/點擊」模式練習。');
+    return false;
+  }
+}
+function applyDetectParams(){
+  if(!onsetNode) return;
+  const m=MODES[mode], mult = $('sens').value/5;   // 滑桿 1~10,5 為基準
+  onsetNode.port.postMessage({floor:noiseFloor, sens:m.sens/mult, deb:m.deb});
+}
+
+/* =====================================================================
+   校準精靈
+===================================================================== */
+$('calBtn').onclick = async ()=>{
+  ensureCtx();
+  if(inputSrc==='mic'){
+    if(!(await initMic())) return;
+    $('calModal').classList.add('show');
+    showCalStep(1);
+  }else{
+    $('calModal').classList.add('show');
+    showCalStep(2);   // 觸控模式不需噪音基準,直接跟拍
+  }
+};
+// 觸控校準:跟拍階段點螢幕任何地方都算一下
+$('calModal').addEventListener('pointerdown', ()=>{
+  if(calMode==='tap' && inputSrc==='tap'){
+    calOnsets.push(ctx.currentTime);
+    if(navigator.vibrate) navigator.vibrate(8);
+  }
+});
+function showCalStep(n){
+  $('calStep1').style.display = n===1?'block':'none';
+  $('calStep2').style.display = n===2?'block':'none';
+  $('calStep3').style.display = n===3?'block':'none';
+}
+$('calCancel1').onclick = ()=>{ calMode=null; $('calModal').classList.remove('show'); };
+$('calFloorBtn').onclick = ()=>{
+  calLvSamples=[]; calMode='floor';
+  $('calFloorBtn').textContent='量測中…';
+  setTimeout(()=>{
+    calMode=null;
+    if(calLvSamples.length){
+      noiseFloor = calLvSamples.reduce((a,b)=>a+b,0)/calLvSamples.length;
+      applyDetectParams();
+    }
+    $('calFloorBtn').textContent='開始量測';
+    showCalStep(2);
+  }, 2000);
+};
+$('calTapBtn').onclick = ()=>{
+  if(calMode==='tap') return;   // 進行中防重入
+  calOnsets=[]; calClicks=[]; calMode='tap';
+  const t0 = ctx.currentTime + 0.8, gap = 60/100;   // 100 BPM
+  for(let i=0;i<12;i++){ const t=t0+i*gap; clickSound(t,i%4===0); calClicks.push(t); }
+  let i=0;
+  const cd = setInterval(()=>{
+    const now=ctx.currentTime;
+    while(i<12 && calClicks[i]<=now) i++;
+    $('calCount').textContent = i<=2? '暖身' : (i)+' / 12';
+    if(now > calClicks[11]+0.6){
+      clearInterval(cd); calMode=null; computeLatency();
+    }
+  }, 60);
+  $('calTapBtn').textContent='跟著打…';
+};
+function computeLatency(){
+  $('calTapBtn').textContent='開始跟拍';
+  const deltas=[];
+  for(let i=2;i<12;i++){
+    let best=null;
+    for(const o of calOnsets){
+      const d=o-calClicks[i];
+      if(d>-0.10 && d<0.35 && (best===null || Math.abs(d)<Math.abs(best))) best=d;
+    }
+    if(best!==null) deltas.push(best);
+  }
+  showCalStep(3);
+  if(deltas.length<5){
+    $('calResult').textContent='樣本不足';
+    $('calNote').textContent='有效打擊少於 5 下。請確認麥克風收得到聲音(看左側音量條),或調高靈敏度後重測。';
+    return;
+  }
+  deltas.sort((a,b)=>a-b);
+  const med = deltas[Math.floor(deltas.length/2)];
+  const clamped = Math.max(-0.05, Math.min(0.30, med));
+  $('calResult').textContent = (clamped*1000).toFixed(0)+' ms';
+  $('calResult').dataset.v = clamped;
+  $('calNote').textContent = `有效樣本 ${deltas.length}/10。這個值包含裝置延遲與你的個人習慣偏移,套用後判定會以它為零點。`;
+}
+$('calRedo').onclick = ()=> showCalStep(2);
+$('calDone').onclick = ()=>{
+  const v = parseFloat($('calResult').dataset.v||'0');
+  offsets[inputSrc] = v;
+  $('hdLat').textContent = (v*1000).toFixed(0)+'ms';
+  $('calModal').classList.remove('show');
+};
+
+/* =====================================================================
+   視覺:鼓皮節拍環(Canvas)
+===================================================================== */
+const cv = $('ring'), g2 = cv.getContext('2d');
+const CX=280, CY=280;
+function angOf(frac){ return -Math.PI/2 + frac*2*Math.PI; }
+function addRipple(audioT, color){
+  const frac = ((audioT - barStart)/barDur) % 1;
+  ripples.push({ang:angOf((frac+1)%1), t0:performance.now(), color});
+}
+function drawRing(){
+  g2.clearRect(0,0,560,560);
+  const now = ctx? ctx.currentTime : 0;
+  // 鼓框(銅圈)+ 鼓皮
+  g2.beginPath(); g2.arc(CX,CY,236,0,7); g2.fillStyle='#3a2c17'; g2.fill();
+  g2.beginPath(); g2.arc(CX,CY,228,0,7); g2.strokeStyle='#D9A441'; g2.lineWidth=6; g2.stroke();
+  g2.beginPath(); g2.arc(CX,CY,214,0,7); g2.fillStyle='#EDE2CB'; g2.fill();
+  g2.beginPath(); g2.arc(CX,CY,214,0,7); g2.strokeStyle='rgba(0,0,0,.15)'; g2.lineWidth=2; g2.stroke();
+  // 拍點刻度
+  for(let b=0;b<16;b++){
+    const a=angOf(b/16), main=b%4===0;
+    const r1=main?188:198, r2=206;
+    g2.beginPath();
+    g2.moveTo(CX+Math.cos(a)*r1, CY+Math.sin(a)*r1);
+    g2.lineTo(CX+Math.cos(a)*r2, CY+Math.sin(a)*r2);
+    g2.strokeStyle=main?'#171310':'rgba(23,19,16,.3)'; g2.lineWidth=main?3:1.5; g2.stroke();
+    if(main){
+      g2.fillStyle='#171310'; g2.font='900 20px Anton'; g2.textAlign='center'; g2.textBaseline='middle';
+      g2.fillText(String(b/4+1), CX+Math.cos(a)*172, CY+Math.sin(a)*172);
+    }
+  }
+  // 節奏型音符
+  const NR=140;
+  for(let i=0;i<16;i++){
+    if(pattern[i]===0) continue;
+    const fakeBar=0, t = stepTime(0,i,1,swing);       // 以小節比例算角度
+    const a = angOf(t);
+    const acc = pattern[i]===2;
+    // 找最近一次此 step 的判定結果來上色
+    let col = acc? '#E4502E' : '#2F6FD6';
+    g2.beginPath(); g2.arc(CX+Math.cos(a)*NR, CY+Math.sin(a)*NR, acc?15:11, 0, 7);
+    g2.fillStyle=col; g2.fill();
+    g2.strokeStyle='#171310'; g2.lineWidth=2; g2.stroke();
+    if(sticking[i] && sticking[i]!==' '){
+      g2.fillStyle='#F1E7D3'; g2.font='700 11px Noto Sans TC'; g2.textAlign='center'; g2.textBaseline='middle';
+      g2.fillText(sticking[i], CX+Math.cos(a)*NR, CY+Math.sin(a)*NR+0.5);
+    }
+  }
+  // 漣漪
+  const pnow=performance.now();
+  ripples = ripples.filter(r=> pnow-r.t0 < 500);
+  for(const r of ripples){
+    const p=(pnow-r.t0)/500;
+    g2.beginPath(); g2.arc(CX+Math.cos(r.ang)*NR, CY+Math.sin(r.ang)*NR, 12+p*34, 0, 7);
+    g2.strokeStyle=r.color; g2.globalAlpha=1-p; g2.lineWidth=4; g2.stroke(); g2.globalAlpha=1;
+  }
+  // 掃針(鼓棒)
+  if(running && ctx){
+    const frac = ((now-barStart)/barDur+1)%1;
+    const a=angOf(frac);
+    g2.save(); g2.translate(CX,CY); g2.rotate(a);
+    g2.beginPath(); g2.moveTo(0,0); g2.lineTo(196,0);
+    g2.strokeStyle='#171310'; g2.lineWidth=5; g2.lineCap='round'; g2.stroke();
+    g2.beginPath(); g2.arc(200,0,8,0,7); g2.fillStyle='#D9A441'; g2.fill();  // 棒頭
+    g2.restore();
+    // 目前 step 高亮(sequencer)
+    const curStep = Math.floor(frac*16)%16;
+    document.querySelectorAll('.step').forEach((el,i)=> el.classList.toggle('cur', i===curStep));
+  }
+  // 中心 logo
+  g2.fillStyle='rgba(23,19,16,.75)'; g2.font='900 13px Anton'; g2.textAlign='center';
+  g2.fillText('SWING LAB', CX, CY-6);
+  g2.font='700 10px Noto Sans TC'; g2.fillStyle='rgba(23,19,16,.5)';
+  g2.fillText(running?'一圈 = 一小節':'按開始練習', CX, CY+12);
+}
+
+/* ---------- 拍點傾向計 ---------- */
+const oc = $('offsetCv'), og = oc.getContext('2d');
+function drawOffset(){
+  og.clearRect(0,0,230,64);
+  og.strokeStyle='#241D18'; og.lineWidth=2;
+  og.beginPath(); og.moveTo(10,40); og.lineTo(220,40); og.stroke();
+  og.beginPath(); og.moveTo(115,28); og.lineTo(115,52); og.strokeStyle='#8C7F6E'; og.stroke();
+  og.fillStyle='#8C7F6E'; og.font='700 9px Noto Sans TC'; og.textAlign='center';
+  og.fillText('搶拍', 30, 60); og.fillText('準', 115, 60); og.fillText('拖拍', 200, 60);
+  if(recentDeltas.length){
+    const avg = recentDeltas.reduce((a,b)=>a+b,0)/recentDeltas.length;
+    const x = 115 + Math.max(-100,Math.min(100,avg));
+    og.beginPath(); og.moveTo(x,18); og.lineTo(x-6,34); og.lineTo(x+6,34); og.closePath();
+    og.fillStyle = Math.abs(avg)<20?'#2F6FD6':'#D9A441'; og.fill();
+    og.fillStyle='#F1E7D3'; og.font='400 14px Anton';
+    og.fillText((avg>0?'+':'')+avg.toFixed(0)+'ms', x, 12);
+  }
+}
+
+/* =====================================================================
+   攝影機:左右手動作平衡(幀差法,只做教練回饋)
+===================================================================== */
+let camStream=null, camVideo=null, prevFrame=null, camL=0, camR=0;
+const camCv=$('camCv'), camG=camCv.getContext('2d',{willReadFrequently:true});
+$('camOn').onchange = async e=>{
+  if(e.target.checked){
+    try{
+      camStream = await navigator.mediaDevices.getUserMedia({video:{width:240,height:180}});
+      camVideo = document.createElement('video');
+      camVideo.srcObject=camStream; camVideo.muted=true; camVideo.playsInline=true; await camVideo.play();
+      $('camBox').style.display='block';
+    }catch(err){ alert('無法開啟攝影機:'+err.message); e.target.checked=false; }
+  }else{
+    if(camStream) camStream.getTracks().forEach(t=>t.stop());
+    camStream=null; prevFrame=null; $('camBox').style.display='none';
+  }
+};
+function camTick(){
+  if(!camStream || !camVideo || camVideo.readyState<2) return;
+  camG.drawImage(camVideo,0,0,240,180);
+  const f = camG.getImageData(0,0,240,180);
+  if(prevFrame){
+    let sl=0,sr=0;
+    for(let y=0;y<180;y+=3) for(let x=0;x<240;x+=3){
+      const i=(y*240+x)*4;
+      const d=Math.abs(f.data[i]-prevFrame.data[i]);
+      if(x<120) sl+=d; else sr+=d;
+    }
+    camL = camL*0.7 + sl*0.3; camR = camR*0.7 + sr*0.3;
+    $('barL').style.width = Math.min(100, camL/400)+'%';
+    $('barR').style.width = Math.min(100, camR/400)+'%';
+    camG.strokeStyle='rgba(217,164,65,.6)'; camG.lineWidth=1;
+    camG.beginPath(); camG.moveTo(120,0); camG.lineTo(120,180); camG.stroke();
+  }
+  prevFrame=f;
+}
+
+/* =====================================================================
+   Sequencer UI
+===================================================================== */
+const grid=$('grid');
+for(let i=0;i<16;i++){
+  const b=document.createElement('button');
+  b.className='step'+(i%4===0?' beat1':'');
+  b.innerHTML='<span class="stick"></span>';
+  b.onclick=()=>{
+    pattern[i]=(pattern[i]+1)%3;
+    $('preset').value='custom';
+    renderGrid();
+  };
+  grid.appendChild(b);
+}
+function renderGrid(){
+  document.querySelectorAll('.step').forEach((el,i)=>{
+    el.classList.toggle('on', pattern[i]===1);
+    el.classList.toggle('acc', pattern[i]===2);
+    el.querySelector('.stick').textContent = pattern[i]>0 ? (sticking[i]||'').trim() : '';
+  });
+}
+function loadPreset(key){
+  const pr=PRESETS[key]; if(!pr) return;
+  pattern = pr.p.split('').map(Number);
+  sticking = pr.s.split('');
+  swing = pr.sw; $('swing').value=swing; $('swVal').textContent=swing+'%';
+  renderGrid();
+}
+$('preset').onchange = e=>{ if(e.target.value!=='custom') loadPreset(e.target.value); };
+loadPreset('eighth');
+
+/* =====================================================================
+   控制綁定
+===================================================================== */
+document.querySelectorAll('[data-mode]').forEach(b=> b.onclick=()=>{
+  document.querySelectorAll('[data-mode]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); mode=b.dataset.mode; applyDetectParams();
+});
+document.querySelectorAll('[data-src]').forEach(b=> b.onclick=async ()=>{
+  document.querySelectorAll('[data-src]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); inputSrc=b.dataset.src;
+  updatePads();
+  $('hdLat').textContent = offsets[inputSrc] ? (offsets[inputSrc]*1000).toFixed(0)+'ms' : '--';
+  if(inputSrc==='mic') await initMic();
+});
+function updatePads(){ $('pads').classList.toggle('show', inputSrc==='tap'); }
+$('bpm').oninput = e=>{
+  const v=+e.target.value; $('bpmVal').textContent=v; $('hdBpm').textContent=v;
+  if(running) pendingBpm=v; else bpm=v;
+};
+$('swing').oninput = e=>{ swing=+e.target.value; $('swVal').textContent=swing+'%'; drawRing(); };
+$('sens').oninput = e=>{
+  const v=+e.target.value;
+  $('sensVal').textContent = v<=3?'低':v<=7?'中':'高';
+  applyDetectParams();
+};
+$('metVol').oninput=e=>$('mvVal').textContent=e.target.value;
+$('gdVol').oninput=e=>$('gvVal').textContent=e.target.value;
+
+/* ---------- 開始/停止(桌機+手機雙按鈕同步) ---------- */
+const goBtns = [$('goBtn'), $('goBtn2')];
+function setGoUI(){
+  for(const b of goBtns){
+    b.textContent = running ? '■ 停止' : '▶ 開始練習';
+    b.classList.toggle('playing', running);
+  }
+}
+/* 螢幕常亮:練習中防止手機自動鎖屏 */
+let wakeLock=null;
+async function requestWake(){ try{ wakeLock = await navigator.wakeLock?.request('screen'); }catch(e){} }
+function releaseWake(){ try{ wakeLock?.release(); }catch(e){} wakeLock=null; }
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && running) requestWake();
+});
+async function startStop(){
+  if(running){ stopRun(); return; }
+  ensureCtx();
+  if(inputSrc==='mic' && !(await initMic())) return;
+  resetStats();
+  expected=[]; ripples=[];
+  bpm=+$('bpm').value; barDur=4*60/bpm; stepIdx=0;
+  barStart = ctx.currentTime + 0.5;
+  running=true; setGoUI(); requestWake();
+  schedTimer=setInterval(scheduler, TICK);
+}
+goBtns.forEach(b=> b.onclick = startStop);
+function stopRun(){
+  running=false; clearInterval(schedTimer); setGoUI(); releaseWake();
+  document.querySelectorAll('.step').forEach(el=>el.classList.remove('cur'));
+}
+
+/* ---------- 手動輸入(打擊墊 / 空白鍵 / 點鼓面) ---------- */
+function tapInput(hand){
+  ensureCtx();
+  if(navigator.vibrate) navigator.vibrate(8);
+  if(calMode==='tap' && inputSrc==='tap'){ calOnsets.push(ctx.currentTime); return; }
+  if(running && inputSrc==='tap') judgeHit(ctx.currentTime, hand);
+}
+$('padL').addEventListener('pointerdown', e=>{ e.preventDefault(); tapInput('L'); });
+$('padR').addEventListener('pointerdown', e=>{ e.preventDefault(); tapInput('R'); });
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space' && !e.repeat){ e.preventDefault(); tapInput(); }
+});
+cv.addEventListener('pointerdown', ()=> tapInput());
+updatePads();
+
+/* ---------- 手機初始化:預設觸控打擊墊、收合次要面板 ---------- */
+if(matchMedia('(pointer:coarse)').matches){
+  inputSrc='tap';
+  document.querySelectorAll('[data-src]').forEach(x=>x.classList.toggle('on', x.dataset.src==='tap'));
+  updatePads();
+}
+if(matchMedia('(max-width:1020px)').matches){
+  document.querySelectorAll('details.sec').forEach(d=>{ if(!d.dataset.keep) d.open=false; });
+}
+
+/* ---------- PWA:service worker ---------- */
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+/* ---------- 主迴圈 ---------- */
+let camFc=0;
+function raf(){
+  drawRing(); drawOffset();
+  if(++camFc>=2){ camFc=0; camTick(); }   // 攝影機 ~30fps 即可
+  requestAnimationFrame(raf);
+}
+raf();
+</script>
+</body>
+</html>
