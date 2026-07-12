@@ -62,6 +62,21 @@ header{display:flex;align-items:stretch;border-bottom:3px solid var(--paper)}
   .seq-wrap{padding:12px 12px 16px}
 }
 
+/* ---------- 學生切換 ---------- */
+.stu-chip{background:var(--smoke);border:2px solid var(--brass);color:var(--paper);
+  padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;transition:.15s}
+.stu-chip:hover{background:#2e2117}
+.stu-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;
+  border:2px solid var(--ink);margin-bottom:6px;cursor:pointer;font-size:14px}
+.stu-row:hover{border-color:var(--dim)}
+.stu-row.cur{border-color:var(--brass);background:#2e2117}
+.stu-row .code{margin-left:auto;color:var(--dim);font-size:13px;letter-spacing:.15em}
+.stu-x{background:none;color:var(--dim);font-size:14px;padding:2px 6px}
+.stu-x:hover{color:var(--coral)}
+.tin{flex:1;min-width:0;background:var(--ink);color:var(--paper);border:2px solid #33291f;
+  border-radius:6px;padding:9px 10px;font-size:14px;font-family:inherit}
+.tin:focus{outline:none;border-color:var(--brass)}
+
 /* ---------- 收合面板(手機) ---------- */
 summary.sec-t{cursor:pointer;user-select:none;-webkit-user-select:none}
 summary.sec-t::-webkit-details-marker{display:none}
@@ -192,6 +207,7 @@ body{touch-action:manipulation}
   </div>
   <div class="hd-brass">RHYTHM&nbsp;·&nbsp;GROOVE&nbsp;·&nbsp;TIME</div>
   <div class="hd-info">
+    <button class="stu-chip" id="stuBtn">👤 訪客</button>
     <div class="hd-stat"><div class="lb">BPM</div><div class="vl num" id="hdBpm">90</div></div>
     <div class="hd-stat"><div class="lb">延遲補償</div><div class="vl num" id="hdLat">--</div></div>
   </div>
@@ -350,6 +366,24 @@ body{touch-action:manipulation}
   </div>
 </div>
 
+<!-- ============ 學生切換 ============ -->
+<div class="modal" id="stuModal">
+  <div class="mcard">
+    <h3>👤 學生切換</h3>
+    <div id="stuList" style="max-height:34vh;overflow:auto;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px">
+      <input class="tin" id="stuName" placeholder="姓名" maxlength="12">
+      <input class="tin" id="stuCode" placeholder="同步碼(留空=新學生)" maxlength="6" style="letter-spacing:.15em">
+      <button class="btn btn-go" id="stuAdd" style="width:auto;padding:10px 16px;margin:0">加入</button>
+    </div>
+    <p class="hint" id="syncHint"></p>
+    <div class="mrow">
+      <button class="btn btn-ghost" id="stuGuest">訪客模式</button>
+      <button class="btn btn-go" id="stuClose">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ 練習紀錄 ============ -->
 <div class="modal" id="recModal">
   <div class="mcard" style="max-width:560px">
@@ -417,6 +451,16 @@ let sticking = new Array(16).fill(''); // 手序(顯示於小鼓聲部)
 let practiceVoice = 'snare';           // 🎯 隔離練習:只判定此聲部,其餘為背景
 const REC_KEY='swinglab_records';      // 練習紀錄 localStorage key
 let currentPreset='eighth';            // 目前節奏型(紀錄用)
+
+/* ---------- 學生 Profile / 雲端同步 ---------- */
+/* 🔧 部署後填入 Firebase Web config 即啟用雲端同步(未填=只存本機,網站照常運作):
+   const FIREBASE_CONFIG = {apiKey:"...", authDomain:"...", projectId:"...", appId:"..."};
+   Firebase 端需:啟用匿名 Anonymous 登入、Firestore 正式版模式、規則開放 codes/{code}、
+   授權網域加入 swing.launchdock.app。詳見 DEPLOY.md。 */
+const FIREBASE_CONFIG = null;
+const PROF_KEY='swinglab_profiles', CUR_KEY='swinglab_cur';
+let profiles = []; try{ profiles = JSON.parse(localStorage.getItem(PROF_KEY))||[]; }catch(e){}
+let curCode = localStorage.getItem(CUR_KEY)||'';   // '' = 訪客(只存本機)
 let barStart = 0, barDur = 0, stepIdx = 0;
 let pendingBpm = null;
 let expected = [];              // {time, step, judged, result}
@@ -1006,8 +1050,10 @@ loadPreset('eighth');
    練習紀錄:節奏型×練習聲部 → 最佳準確率/BPM/次數
    (localStorage;資料結構預留之後接 Firebase 同步)
 ===================================================================== */
-function loadRecs(){ try{ return JSON.parse(localStorage.getItem(REC_KEY))||{}; }catch(e){ return {}; } }
-function saveRecs(r){ try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); }catch(e){} }
+function curProfile(){ return profiles.find(p=>p.code===curCode); }
+function recStoreKey(){ return curCode ? REC_KEY+'_'+curCode : REC_KEY; }   // 紀錄跟著學生走
+function loadRecs(){ try{ return JSON.parse(localStorage.getItem(recStoreKey()))||{}; }catch(e){ return {}; } }
+function saveRecs(r){ try{ localStorage.setItem(recStoreKey(), JSON.stringify(r)); }catch(e){} }
 function recId(){ return currentPreset+'|'+practiceVoice; }
 function presetName(k){ const o=$('preset').querySelector(`option[value="${k}"]`); return o?o.textContent:'自訂'; }
 function voiceName(v){ const x=VOICES.find(a=>a.id===v); return x?x.name:v; }
@@ -1027,6 +1073,7 @@ function commitRecord(){
   if(acc>r.bestAcc){ r.bestAcc=acc; r.bestAccBpm=bpm; newBest=true; }
   if(acc>=85 && bpm>r.maxBpm) r.maxBpm=bpm;
   recs[id]=r; saveRecs(recs); updateRecPanel();
+  pushCloud();   // 有雲端就同步(fire-and-forget)
   if(newBest){ const f=$('recFlash'); f.style.opacity=1; setTimeout(()=>f.style.opacity=0, 1600); }
 }
 function renderRecTable(){
@@ -1051,8 +1098,8 @@ function renderRecTable(){
 $('recAllBtn').onclick=()=>{ renderRecTable(); $('recModal').classList.add('show'); };
 $('recClose').onclick=()=>$('recModal').classList.remove('show');
 $('recClear').onclick=()=>{
-  if(confirm('確定清除所有練習紀錄?此動作無法復原。')){
-    localStorage.removeItem(REC_KEY); renderRecTable(); updateRecPanel();
+  if(confirm('確定清除目前學生的練習紀錄?此動作無法復原。')){
+    localStorage.removeItem(recStoreKey()); renderRecTable(); updateRecPanel(); pushCloud();
   }
 };
 $('recCsv').onclick=()=>{
@@ -1064,8 +1111,122 @@ $('recCsv').onclick=()=>{
   }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='swinglab_records.csv'; a.click(); URL.revokeObjectURL(a.href);
+  a.download='swinglab_'+((curProfile()||{}).name||'訪客')+'.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
+
+/* =====================================================================
+   學生 Profile + Firebase 雲端同步(匿名 Auth + Firestore codes/{code})
+   未填 FIREBASE_CONFIG 時自動降級為只存本機,功能照常
+===================================================================== */
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+let fbDb=null, fbInit=null;
+function initCloud(){
+  if(!FIREBASE_CONFIG) return Promise.resolve(false);
+  if(fbInit) return fbInit;
+  fbInit = (async ()=>{
+    try{
+      const V='https://www.gstatic.com/firebasejs/10.12.2/firebase-';
+      await loadScript(V+'app-compat.js');
+      await Promise.all([loadScript(V+'auth-compat.js'), loadScript(V+'firestore-compat.js')]);
+      firebase.initializeApp(FIREBASE_CONFIG);
+      await firebase.auth().signInAnonymously();
+      fbDb = firebase.firestore();
+      return true;
+    }catch(e){ console.warn('雲端同步不可用:', e.message); return false; }
+  })();
+  return fbInit;
+}
+function mergeRec(a,b){
+  if(!a) return b; if(!b) return a;
+  return {
+    bestAcc: Math.max(a.bestAcc,b.bestAcc),
+    bestAccBpm: a.bestAcc>=b.bestAcc ? a.bestAccBpm : b.bestAccBpm,
+    maxBpm: Math.max(a.maxBpm||0, b.maxBpm||0),
+    sessions: Math.max(a.sessions,b.sessions),
+    lastTs: Math.max(a.lastTs,b.lastTs)
+  };
+}
+async function pullCloud(){
+  if(!curCode || !(await initCloud())) return;
+  try{
+    const snap = await fbDb.collection('codes').doc(curCode).get();
+    if(snap.exists){
+      const cloud=(snap.data()||{}).records||{}, local=loadRecs(), merged={};
+      for(const k of new Set([...Object.keys(cloud), ...Object.keys(local)]))
+        merged[k]=mergeRec(local[k], cloud[k]);
+      saveRecs(merged); updateRecPanel();
+    }
+  }catch(e){ console.warn('pull失敗:', e.message); }
+}
+async function pushCloud(){
+  if(!curCode || !(await initCloud())) return;
+  try{
+    await fbDb.collection('codes').doc(curCode).set({
+      name:(curProfile()||{}).name||'', records:loadRecs(), updated:Date.now()
+    });
+  }catch(e){ console.warn('push失敗:', e.message); }
+}
+
+/* ---------- 學生切換 UI ---------- */
+function saveProfiles(){ try{ localStorage.setItem(PROF_KEY, JSON.stringify(profiles)); }catch(e){} }
+function setCur(code){
+  curCode=code; try{ localStorage.setItem(CUR_KEY, code); }catch(e){}
+  updateStuUI(); updateRecPanel();
+  if(code) pullCloud();
+}
+function genCode(){
+  const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // 避開易混淆字元 I/L/O/0/1
+  let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)];
+  return s;
+}
+function updateStuUI(){
+  const p=curProfile();
+  $('stuBtn').textContent = p ? '👤 '+p.name : '👤 訪客';
+  const el=$('stuList'); el.innerHTML='';
+  if(!profiles.length) el.innerHTML='<p class="hint" style="margin:0">還沒有學生。輸入姓名按「加入」,系統會產生一組同步碼。</p>';
+  for(const pr of profiles){
+    const row=document.createElement('div');
+    row.className='stu-row'+(pr.code===curCode?' cur':'');
+    row.innerHTML=`<b>${pr.name}</b><span class="code num">${pr.code}</span>`;
+    row.onclick=()=> setCur(pr.code);
+    const x=document.createElement('button'); x.textContent='✕'; x.className='stu-x';
+    x.onclick=e=>{
+      e.stopPropagation();
+      if(confirm(`從此裝置移除 ${pr.name}?(紀錄與雲端資料不會刪除,重新輸入同步碼即可找回)`)){
+        profiles=profiles.filter(q=>q!==pr); saveProfiles();
+        if(curCode===pr.code) setCur(''); else updateStuUI();
+      }
+    };
+    row.appendChild(x); el.appendChild(row);
+  }
+  $('syncHint').innerHTML = p
+    ? `<b>${p.name}</b> 的同步碼:<b class="num" style="font-size:16px;color:var(--brass);letter-spacing:.2em">${p.code}</b><br>`
+      +`在家打開同一個網站,輸入姓名和這組碼,就能接續紀錄。`
+      +(FIREBASE_CONFIG ? '' : '<br>⚠ 雲端尚未設定,目前紀錄只存這台裝置。')
+    : '訪客模式:紀錄只存這台裝置、不跟隨學生。';
+}
+$('stuBtn').onclick=()=>{ updateStuUI(); $('stuModal').classList.add('show'); };
+$('stuClose').onclick=()=>$('stuModal').classList.remove('show');
+$('stuGuest').onclick=()=> setCur('');
+$('stuAdd').onclick=()=>{
+  const name=$('stuName').value.trim();
+  if(!name){ alert('請輸入姓名'); return; }
+  let code=$('stuCode').value.trim().toUpperCase();
+  if(code && !/^[A-Z0-9]{6}$/.test(code)){ alert('同步碼是 6 位英數字'); return; }
+  if(!code) code=genCode();
+  const ex=profiles.find(p=>p.code===code);
+  if(ex) ex.name=name; else profiles.push({name, code});
+  saveProfiles();
+  $('stuName').value=''; $('stuCode').value='';
+  setCur(code);
+};
+updateStuUI();
+if(curCode) pullCloud();
 
 /* =====================================================================
    控制綁定

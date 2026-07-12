@@ -29,6 +29,24 @@ launchdock.app zone 新增 CNAME：
 
 repo → Settings → Pages → 勾 **Enforce HTTPS**。
 
+## 5. Firebase 雲端同步（學生跨裝置紀錄）
+
+前端已完成，未設定時自動降級為只存本機。啟用步驟（照 firebase-web-sync skill）：
+
+1. Firebase Console 建專案（或沿用 daily-bread 的專案）→ Authentication → Sign-in method → **啟用 匿名 Anonymous**（同步碼靠它，沒開會連不上）。
+2. 建 Firestore Database，**一定選「正式版模式」**（測試模式 30 天後規則自動關閉、期間資料全公開）。
+3. 安全規則：
+   ```
+   match /codes/{code} { allow read, write: if request.auth != null; }
+   ```
+4. Authentication → Settings → 授權網域加 `swing.launchdock.app`（測試加 `localhost`）。
+5. 專案設定 → 新增 Web 應用 → 把 `firebaseConfig` 的值填進 `index.html` 頂部的
+   `const FIREBASE_CONFIG = null;`（搜尋 `🔧` 即可找到）。config 放前端是正常且安全的，
+   安全靠 Firestore 規則把關。
+
+資料模型：`codes/{6碼同步碼}` = `{name, records:{...}, updated}`。
+同步碼是共享秘密：知道碼就能讀寫該學生紀錄（低敏資料，可接受；要逐人隔離再加 Google 登入路徑）。
+
 ## 已知踩坑（來自 static-site-deploy skill）
 
 - push 被拒「fetch first」：多半是 Pages UI 自動 commit 了 CNAME。
