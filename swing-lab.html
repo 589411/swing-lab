@@ -295,12 +295,24 @@ body{touch-action:manipulation}
   <div class="seq-head">
     <div class="sec-t">節奏型工作台</div>
     <select id="preset">
-      <option value="sixteenth">十六分音符 · 單擊基本功</option>
-      <option value="eighth" selected>八分音符 · 穩定練習</option>
-      <option value="paradiddle">Paradiddle · RLRR LRLL</option>
-      <option value="swingride">Swing Ride · 爵士鑔片型</option>
-      <option value="shuffle">Shuffle · 藍調搖擺</option>
-      <option value="clave">Son Clave 3-2 · 拉丁</option>
+      <optgroup label="基本功 Rudiments">
+        <option value="sixteenth">十六分音符 · 單擊</option>
+        <option value="eighth" selected>八分音符 · 穩定練習</option>
+        <option value="doublestroke">Double Stroke · RRLL 雙擊</option>
+        <option value="paradiddle">Paradiddle · RLRR LRLL</option>
+        <option value="fivestroke">Five Stroke Roll · 五連擊</option>
+      </optgroup>
+      <optgroup label="爵士 Swing">
+        <option value="swingride">Swing Ride · 爵士鑔片型</option>
+        <option value="shuffle">Shuffle · 藍調搖擺</option>
+        <option value="charleston">Charleston · 爵士切分</option>
+        <option value="offbeat">反拍練習 · Off-beat Comping</option>
+      </optgroup>
+      <optgroup label="拉丁 Latin">
+        <option value="clave">Son Clave 3-2</option>
+        <option value="rumba">Rumba Clave 3-2</option>
+        <option value="tresillo">Tresillo · 3-3-2</option>
+      </optgroup>
       <option value="custom">✏️ 自訂(點格子編輯)</option>
     </select>
     <span class="hint" style="margin:0">點格子切換:關 → <span style="color:var(--brass)">開</span> → <span style="color:var(--coral)">重音</span></span>
@@ -378,12 +390,21 @@ let mode='pad', inputSrc='mic';
 
 /* ---------- 節奏型 preset ---------- */
 const PRESETS = {
-  sixteenth:{p:'1111111111111111', s:'RLRLRLRLRLRLRLRL', sw:0},
-  eighth:   {p:'2010101020101010', s:'R L R L R L R L ', sw:0},
-  paradiddle:{p:'2011201120112011', s:'RLRRLRLLRLRRLRLL', sw:0},
-  swingride:{p:'2000101020001010', s:'R   R L R   R L ', sw:66},
-  shuffle:  {p:'2010101020101010', s:'R L R L R L R L ', sw:66},
-  clave:    {p:'2001001000201000', s:'R  R  R   R R   ', sw:0}
+  /* 基本功 */
+  sixteenth:  {p:'1111111111111111', s:'RLRLRLRLRLRLRLRL', sw:0},
+  eighth:     {p:'2010101020101010', s:'R L R L R L R L ', sw:0},
+  doublestroke:{p:'2111211121112111', s:'RRLLRRLLRRLLRRLL', sw:0},
+  paradiddle: {p:'2111211121112111', s:'RLRRLRLLRLRRLRLL', sw:0},
+  fivestroke: {p:'1111200011112000', s:'RRLLR   LLRRL   ', sw:0},
+  /* 爵士 Swing */
+  swingride:  {p:'2000101020001010', s:'R   R L R   R L ', sw:66},
+  shuffle:    {p:'2010101020101010', s:'R L R L R L R L ', sw:66},
+  charleston: {p:'2000001020000010', s:'R     R R     R ', sw:66},
+  offbeat:    {p:'0010001000100010', s:'  R   L   R   L ', sw:66},
+  /* 拉丁 Latin */
+  clave:      {p:'2001001000201000', s:'R  R  R   R R   ', sw:0},
+  rumba:      {p:'2001000100201000', s:'R  R   R  R R   ', sw:0},
+  tresillo:   {p:'2001001020010010', s:'R  L  R R  L  R ', sw:0}
 };
 
 /* =====================================================================
