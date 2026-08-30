@@ -250,15 +250,16 @@ body{touch-action:manipulation}
     </details>
 
     <details class="sec" open>
-      <summary class="sec-t">力度檔位 🔊</summary>
+      <summary class="sec-t">音量檔位 🔊</summary>
       <div class="seg">
         <button class="mode-btn on" data-dyn="off">關閉</button>
-        <button class="mode-btn" data-dyn="steps">三檔</button>
-        <button class="mode-btn" data-dyn="ramp">推上去</button>
+        <button class="mode-btn" data-dyn="steps">音量三檔</button>
+        <button class="mode-btn" data-dyn="ramp">音量推上去</button>
       </div>
       <button class="btn btn-ghost" id="dynCalBtn">🔊 力度校準(打 8 下最大力)</button>
       <div class="stat-row" style="margin-top:6px"><span>校準狀態</span><b class="num" id="dynRefTxt">未校準</b></div>
-      <div class="hint" id="dynHint"><b>三檔</b>:每 4 小節換一檔(30%→60%→100%),練「停得住」。<b>推上去</b>:8 小節從 30% 線性推到 100%,練「不跳階、不加速」。只有麥克風輸入能量力度。</div>
+      <div class="hint" id="dynHint"><b style="color:#D9A441">下面的 30／60／100 是「音量」的百分比,不是速度。速度全程不動——溫度可以一直升,速度不可以動。</b><br>
+        <b>三檔</b>:每 4 小節換一檔(音量 30%→60%→100%),練「停得住」。<b>推上去</b>:8 小節音量從 30% 線性推到 100%,練「不跳階、不加速」。只有麥克風輸入量得到你打多大力。</div>
     </details>
 
     <details class="sec" open>
@@ -337,15 +338,15 @@ body{touch-action:manipulation}
       <div class="stat-row"><span class="c-x">MISS</span><b class="c-x num" id="nM">0</b></div>
     </div>
     <div class="sec" id="dynSec" style="display:none">
-      <div class="sec-t">力度檔位</div>
-      <div class="stat-row"><span>目標 / 實際</span><b class="num" id="dynNow">--</b></div>
+      <div class="sec-t">音量檔位</div>
+      <div class="stat-row"><span>目標音量 / 實際</span><b class="num" id="dynNow">--</b></div>
       <div class="stat-row"><span class="c-p" id="dynL1">低檔</span><b class="num" id="dynV1">--</b></div>
       <div class="stat-row"><span class="c-g" id="dynL2">中檔</span><b class="num" id="dynV2">--</b></div>
       <div class="stat-row"><span class="c-o" id="dynL3">高檔</span><b class="num" id="dynV3">--</b></div>
       <div class="stat-row"><span>檔位命中率</span><b class="num" id="dynAcc">--</b></div>
-      <div class="stat-row"><span>三檔分離度</span><b class="num" id="dynSep">--</b></div>
+      <div class="stat-row"><span>三檔音量分離度</span><b class="num" id="dynSep">--</b></div>
       <div class="stat-row"><span>大聲時搶拍</span><b class="num" id="dynCoup">--</b></div>
-      <div class="hint" style="margin-top:8px">每檔顯示「平均實際 ±浮動」,浮動小＝停得住。<b>分離度</b>是三檔拉不拉得開。<b>大聲時搶拍</b>是溫度與速度有沒有黏在一起,正數代表一大聲就趕,目標 0。</div>
+      <div class="hint" style="margin-top:8px">每檔顯示「平均實際音量 ±浮動」,浮動小＝停得住。<b>分離度</b>是三檔音量拉不拉得開。<b>大聲時搶拍</b>是溫度與速度有沒有黏在一起,正數代表一大聲就趕,目標 0。</div>
     </div>
     <div class="sec">
       <div class="sec-t">拍點傾向(搶拍/拖拍)</div>
@@ -803,12 +804,12 @@ $('dynCalBtn').onclick = async ()=>{
 };
 document.querySelectorAll('[data-dyn]').forEach(b=> b.onclick = ()=>{
   const v=b.dataset.dyn;
-  if(v!=='off' && inputSrc!=='mic'){ dynWarn('力度檔位需要麥克風輸入——空白鍵/點擊量不到你打多大力。'); return; }
+  if(v!=='off' && inputSrc!=='mic'){ dynWarn('音量檔位需要麥克風輸入——空白鍵/點擊量不到你打多大力。'); return; }
   if(v!=='off' && dynRef<=0){ dynWarn('請先按上面的「力度校準」,打 8 下最大力,系統才知道 100% 是多大。'); return; }
   document.querySelectorAll('[data-dyn]').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); dynMode=v;
   $('dynSec').style.display = v==='off' ? 'none' : '';
-  const L = v==='ramp' ? ['前段(低)','中段','後段(高)'] : ['30% 檔','60% 檔','100% 檔'];
+  const L = v==='ramp' ? ['前段(小聲)','中段','後段(大聲)'] : ['音量 30%','音量 60%','音量 100%'];
   $('dynL1').textContent=L[0]; $('dynL2').textContent=L[1]; $('dynL3').textContent=L[2];
   dynRec=[]; updateDynStats();
 });
