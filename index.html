@@ -250,6 +250,18 @@ body{touch-action:manipulation}
     </details>
 
     <details class="sec" open>
+      <summary class="sec-t">力度檔位 🔊</summary>
+      <div class="seg">
+        <button class="mode-btn on" data-dyn="off">關閉</button>
+        <button class="mode-btn" data-dyn="steps">三檔</button>
+        <button class="mode-btn" data-dyn="ramp">推上去</button>
+      </div>
+      <button class="btn btn-ghost" id="dynCalBtn">🔊 力度校準(打 8 下最大力)</button>
+      <div class="stat-row" style="margin-top:6px"><span>校準狀態</span><b class="num" id="dynRefTxt">未校準</b></div>
+      <div class="hint" id="dynHint"><b>三檔</b>:每 4 小節換一檔(30%→60%→100%),練「停得住」。<b>推上去</b>:8 小節從 30% 線性推到 100%,練「不跳階、不加速」。只有麥克風輸入能量力度。</div>
+    </details>
+
+    <details class="sec" open>
       <summary class="sec-t">聲音</summary>
       <label class="sl">節拍器音量 <b id="mvVal">70</b></label>
       <input type="range" id="metVol" min="0" max="100" value="70">
@@ -323,6 +335,17 @@ body{touch-action:manipulation}
       <div class="stat-row"><span class="c-g">GREAT ±60ms</span><b class="c-g num" id="nG">0</b></div>
       <div class="stat-row"><span class="c-o">GOOD ±100ms</span><b class="c-o num" id="nO">0</b></div>
       <div class="stat-row"><span class="c-x">MISS</span><b class="c-x num" id="nM">0</b></div>
+    </div>
+    <div class="sec" id="dynSec" style="display:none">
+      <div class="sec-t">力度檔位</div>
+      <div class="stat-row"><span>目標 / 實際</span><b class="num" id="dynNow">--</b></div>
+      <div class="stat-row"><span class="c-p" id="dynL1">低檔</span><b class="num" id="dynV1">--</b></div>
+      <div class="stat-row"><span class="c-g" id="dynL2">中檔</span><b class="num" id="dynV2">--</b></div>
+      <div class="stat-row"><span class="c-o" id="dynL3">高檔</span><b class="num" id="dynV3">--</b></div>
+      <div class="stat-row"><span>檔位命中率</span><b class="num" id="dynAcc">--</b></div>
+      <div class="stat-row"><span>三檔分離度</span><b class="num" id="dynSep">--</b></div>
+      <div class="stat-row"><span>大聲時搶拍</span><b class="num" id="dynCoup">--</b></div>
+      <div class="hint" style="margin-top:8px">每檔顯示「平均實際 ±浮動」,浮動小＝停得住。<b>分離度</b>是三檔拉不拉得開。<b>大聲時搶拍</b>是溫度與速度有沒有黏在一起,正數代表一大聲就趕,目標 0。</div>
     </div>
     <div class="sec">
       <div class="sec-t">拍點傾向(搶拍/拖拍)</div>
@@ -499,6 +522,24 @@ const MODES = {
 };
 let mode='pad', inputSrc='mic';
 
+/* ---------- 力度檔位模式(A3 力度控制 / D1 音量層次) ----------
+   原理:onset worklet 早就把每一下的 RMS 一起送過來了(d.e),原本被丟掉。
+   這裡接起來,除以「最大力度參考值」正規化成 0~1 的檔位,再跟目標檔位比。
+   量的是「三檔分不分得開、守不守得住」,不是絕對分貝——麥克風收的是整個房間,
+   絕對值沒有意義,可重現性才有。 */
+const LV_TOL   = 0.12;                  // 檔位容差(正規化絕對值)
+const DYN_STEPS= [0.30, 0.60, 1.00];
+let dynMode='off';                      // off | steps | ramp
+let dynRef  = +(localStorage.getItem('swinglab_dynref')||0) || 0;   // 最大力度參考 RMS
+let dynCal  = null;                     // 校準中:{vals:[]}
+let dynRec  = [];                       // {target, lv, ms}
+let barNo   = 0;                        // 目前第幾小節(力度曲線用)
+function dynTarget(){
+  if(dynMode==='steps') return DYN_STEPS[Math.floor(barNo/4)%3];
+  if(dynMode==='ramp')  return 0.30 + 0.70*((barNo%8)/7);
+  return null;
+}
+
 /* ---------- 節奏型 preset ---------- */
 const PRESETS = {
   /* 基本功(16格,小鼓單聲部) */
@@ -628,7 +669,7 @@ function scheduler(){
       if(pattern[vc][stepIdx]>0){
         drumSound(vc, t, pattern[vc][stepIdx]===2, vc===practiceVoice);
         if(vc===practiceVoice){
-          expected.push({time:t, step:stepIdx, judged:false, result:''});
+          expected.push({time:t, step:stepIdx, judged:false, result:'', target:dynTarget()});
           barExpected++;
         }
       }
@@ -660,6 +701,8 @@ function onBarEnd(){
     }
   }
   barExpected=0; barHitPts=0;
+  barNo++;
+  if(dynMode!=='off') updateDynStats();
 }
 
 /* =====================================================================
@@ -667,7 +710,7 @@ function onBarEnd(){
 ===================================================================== */
 const PTS = {P:100,G:70,O:40,M:0};
 let totalJudged = 0, totalPts = 0;
-function judgeHit(rawT, hand){
+function judgeHit(rawT, hand, amp){
   const t = rawT - (offsets[inputSrc]||0);
   let best=null, bestD=1e9;
   for(const e of expected){
@@ -684,6 +727,14 @@ function judgeHit(rawT, hand){
   if(hand){
     const want=(sticking[best.step]||'').trim().toUpperCase();
     if((want==='R'||want==='L') && want!==hand) hint = want==='R'?'· 手序:右':'· 手序:左';
+  }
+  if(dynMode!=='off' && amp!==undefined && dynRef>0 && best.target!=null){
+    const lv = amp/dynRef;
+    dynRec.push({target:best.target, lv, ms});
+    const d = lv - best.target;
+    const lvTxt = Math.abs(d)<=LV_TOL ? '· 檔位準' : (d<0 ? '· 太小' : '· 太大');
+    hint = hint ? hint+' '+lvTxt : lvTxt;
+    $('dynNow').textContent = Math.round(best.target*100)+'% / '+Math.round(lv*100)+'%';
   }
   registerJudge(r, ms, best, hint);
 }
@@ -716,6 +767,76 @@ function updateStats(){
 function resetStats(){
   score=0;combo=0;bestCombo=0;nP=nG=nO=nM=0;totalJudged=0;totalPts=0;
   recentDeltas=[];barExpected=0;barHitPts=0;updateStats();$('acc').textContent='--';
+}
+
+/* =====================================================================
+   力度檔位:校準、統計、UI
+===================================================================== */
+const DYN_HINT_HTML = $('dynHint') ? $('dynHint').innerHTML : '';
+let dynWarnTimer=null;
+function dynWarn(msg){
+  const h=$('dynHint'); h.innerHTML='<b style="color:#E4502E">'+msg+'</b>';
+  clearTimeout(dynWarnTimer);
+  dynWarnTimer=setTimeout(()=>{ h.innerHTML=DYN_HINT_HTML; }, 4000);
+}
+function setDynRef(v){
+  dynRef=v;
+  try{ localStorage.setItem('swinglab_dynref', String(v)); }catch(e){}
+  $('dynRefTxt').textContent = v>0 ? '已校準' : '未校準';
+}
+function onDynCalHit(){
+  const n=dynCal.vals.length;
+  $('dynCalBtn').textContent = '打…… '+n+' / 8';
+  if(n>=8){
+    const v=dynCal.vals.slice().sort((a,b)=>a-b).slice(2);   // 丟掉最小的兩下(沒打實)
+    setDynRef(v.reduce((a,b)=>a+b,0)/v.length);
+    dynCal=null;
+    $('dynCalBtn').textContent='🔊 重新校準力度';
+  }
+}
+$('dynCalBtn').onclick = async ()=>{
+  if(inputSrc!=='mic'){ dynWarn('力度校準需要麥克風輸入——空白鍵/點擊量不到你打多大力。'); return; }
+  ensureCtx();
+  if(!(await initMic())) return;
+  dynCal={vals:[]};
+  $('dynCalBtn').textContent='打…… 0 / 8';
+};
+document.querySelectorAll('[data-dyn]').forEach(b=> b.onclick = ()=>{
+  const v=b.dataset.dyn;
+  if(v!=='off' && inputSrc!=='mic'){ dynWarn('力度檔位需要麥克風輸入——空白鍵/點擊量不到你打多大力。'); return; }
+  if(v!=='off' && dynRef<=0){ dynWarn('請先按上面的「力度校準」,打 8 下最大力,系統才知道 100% 是多大。'); return; }
+  document.querySelectorAll('[data-dyn]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); dynMode=v;
+  $('dynSec').style.display = v==='off' ? 'none' : '';
+  const L = v==='ramp' ? ['前段(低)','中段','後段(高)'] : ['30% 檔','60% 檔','100% 檔'];
+  $('dynL1').textContent=L[0]; $('dynL2').textContent=L[1]; $('dynL3').textContent=L[2];
+  dynRec=[]; updateDynStats();
+});
+function mean(a){ return a.length? a.reduce((x,y)=>x+y,0)/a.length : null; }
+function sd(a){ const m=mean(a); return m==null?null:Math.sqrt(mean(a.map(x=>(x-m)*(x-m)))); }
+function updateDynStats(){
+  if(dynMode==='off') return;
+  // 一律分三桶,steps 是 30/60/100,ramp 是前/中/後
+  const B=[[],[],[]], MS=[[],[],[]];
+  for(const r of dynRec){
+    const i = r.target<=0.45?0 : r.target<=0.80?1 : 2;
+    B[i].push(r.lv); MS[i].push(r.ms);
+  }
+  for(let i=0;i<3;i++){
+    const m=mean(B[i]);
+    $('dynV'+(i+1)).textContent = m==null? '--'
+      : Math.round(m*100)+'% ±'+Math.round(sd(B[i])*100);
+  }
+  const hit = dynRec.filter(r=>Math.abs(r.lv-r.target)<=LV_TOL).length;
+  $('dynAcc').textContent = dynRec.length? (100*hit/dynRec.length).toFixed(0)+'%' : '--';
+  const lo=mean(B[0]), hi=mean(B[2]);
+  $('dynSep').textContent = (lo!=null&&hi!=null)? Math.round((hi-lo)*100)+' 個百分點' : '--';
+  const msLo=mean(MS[0]), msHi=mean(MS[2]);
+  if(msLo!=null && msHi!=null){
+    const c = msLo-msHi;    // 正數:大聲那一檔比小聲那一檔早(搶)
+    $('dynCoup').textContent = (c>=0?'+':'')+c.toFixed(0)+'ms';
+    $('dynCoup').style.color = Math.abs(c)<=8 ? 'var(--paper)' : '#E4502E';
+  } else $('dynCoup').textContent='--';
 }
 
 /* =====================================================================
@@ -765,7 +886,8 @@ async function initMic(){
       }
       if(d.onset!==undefined){
         if(calMode==='tap') calOnsets.push(d.onset);
-        else if(running && inputSrc==='mic') judgeHit(d.onset);
+        else if(running && inputSrc==='mic') judgeHit(d.onset, null, d.e);
+        else if(dynCal) { dynCal.vals.push(d.e); onDynCalHit(); }
       }
     };
     applyDetectParams();
@@ -1283,6 +1405,11 @@ document.querySelectorAll('[data-src]').forEach(b=> b.onclick=async ()=>{
   updatePads();
   $('hdLat').textContent = offsets[inputSrc] ? (offsets[inputSrc]*1000).toFixed(0)+'ms' : '--';
   if(inputSrc==='mic') await initMic();
+  else if(dynMode!=='off'){
+    dynMode='off';
+    document.querySelectorAll('[data-dyn]').forEach(x=>x.classList.toggle('on', x.dataset.dyn==='off'));
+    $('dynSec').style.display='none';
+  }
 });
 function updatePads(){ $('pads').classList.toggle('show', inputSrc==='tap'); }
 $('bpm').oninput = e=>{
@@ -1319,7 +1446,8 @@ async function startStop(){
   ensureCtx();
   if(inputSrc==='mic' && !(await initMic())) return;
   resetStats();
-  expected=[]; ripples=[];
+  expected=[]; ripples=[]; dynRec=[]; barNo=0;
+  if(dynMode!=='off'){ updateDynStats(); $('dynNow').textContent='--'; }
   bpm=+$('bpm').value; barDur=4*60/bpm; stepIdx=0;
   // Count-in:先數一小節純節拍器(1 2 3 4),學生有預備拍才進節奏
   const t0 = ctx.currentTime + 0.35;
@@ -1363,6 +1491,8 @@ if(matchMedia('(max-width:1020px)').matches){
 }
 // 還原本機存的校準值顯示
 $('hdLat').textContent = offsets[inputSrc] ? (offsets[inputSrc]*1000).toFixed(0)+'ms' : '--';
+$('dynRefTxt').textContent = dynRef>0 ? '已校準' : '未校準';
+if(dynRef>0) $('dynCalBtn').textContent='🔊 重新校準力度';
 
 /* ---------- SVG 鼓組視覺化初始化 ---------- */
 const drumkitSvg = $('drumkit');
