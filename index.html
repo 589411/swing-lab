@@ -263,6 +263,23 @@ body{touch-action:manipulation}
     </details>
 
     <details class="sec" open>
+      <summary class="sec-t">意外模式 ⚡</summary>
+      <div class="seg">
+        <button class="mode-btn on" data-chaos="off">關閉</button>
+        <button class="mode-btn" data-chaos="drift">速度會漂</button>
+      </div>
+      <div class="seg">
+        <button class="mode-btn" data-chaos="shift">突然插拍</button>
+        <button class="mode-btn" data-chaos="blackout">節拍器消失</button>
+      </div>
+      <div class="stat-row" style="margin-top:6px"><span>現在發生什麼</span><b class="num" id="chaosNote" style="font-size:12px">--</b></div>
+      <div class="hint" id="chaosHint">排練不會亂,聚會一定會亂。這裡練的是亂掉之後那四拍。<br>
+        <b>速度會漂</b>:參考時間軸自己偷偷變快變慢(偏向被拖慢)。同時給你兩個數字——跟著漂、還是守住原速,你才知道自己剛剛做了哪一件。<br>
+        <b>突然插拍</b>:每隔幾小節重拍會位移 1~2 拍,量你幾拍之內上車。<br>
+        <b>節拍器消失</b>:四小節有聲、四小節靜音,判定照常。靜音段的準度就是你的內在脈動。</div>
+    </details>
+
+    <details class="sec" open>
       <summary class="sec-t">聲音</summary>
       <label class="sl">節拍器音量 <b id="mvVal">70</b></label>
       <input type="range" id="metVol" min="0" max="100" value="70">
@@ -347,6 +364,17 @@ body{touch-action:manipulation}
       <div class="stat-row"><span>三檔音量分離度</span><b class="num" id="dynSep">--</b></div>
       <div class="stat-row"><span>大聲時搶拍</span><b class="num" id="dynCoup">--</b></div>
       <div class="hint" style="margin-top:8px">每檔顯示「平均實際音量 ±浮動」,浮動小＝停得住。<b>分離度</b>是三檔音量拉不拉得開。<b>大聲時搶拍</b>是溫度與速度有沒有黏在一起,正數代表一大聲就趕,目標 0。</div>
+    </div>
+    <div class="sec" id="chaosSec" style="display:none">
+      <div class="sec-t">意外模式</div>
+      <div class="stat-row" id="rowDrift1"><span>跟著漂(平均差)</span><b class="num" id="chDrift">--</b></div>
+      <div class="stat-row" id="rowDrift2"><span>守住原速(平均差)</span><b class="num" id="chOrig">--</b></div>
+      <div class="stat-row" id="rowDrift3"><span>你剛剛做了什麼</span><b class="num" id="chWhich" style="font-size:12px">--</b></div>
+      <div class="stat-row" id="rowShift"><span>上車時間</span><b class="num" id="chBoard">--</b></div>
+      <div class="stat-row" id="rowBlack1"><span>有聲段(平均差)</span><b class="num" id="chSnd">--</b></div>
+      <div class="stat-row" id="rowBlack2"><span>靜音段(平均差)</span><b class="num" id="chSil">--</b></div>
+      <div class="stat-row"><span>掉拍復原</span><b class="num" id="chRecov">--</b></div>
+      <div class="hint" style="margin-top:8px"><b>掉拍復原</b>是 MISS 之後幾拍回到 PERFECT,所有模式都在算。能力地圖的門檻是一小節之內,也就是 4 拍以內。</div>
     </div>
     <div class="sec">
       <div class="sec-t">拍點傾向(搶拍/拖拍)</div>
@@ -503,6 +531,25 @@ const PROF_KEY='swinglab_profiles', CUR_KEY='swinglab_cur';
 let profiles = []; try{ profiles = JSON.parse(localStorage.getItem(PROF_KEY))||[]; }catch(e){}
 let curCode = localStorage.getItem(CUR_KEY)||'';   // '' = 訪客(只存本機)
 let barStart = 0, barDur = 0, stepIdx = 0;
+
+/* ---------- 意外模式(F 復原欄 / B4 跟人不跟機器 / C2 上車) ----------
+   母文件 4.4 把「換成一首歌」跟「時間軸可以被破壞」綁成一個動作,整包卡在
+   「壞掉的音檔素材從哪來」。但那張表五列裡只有最後一列(段落標記+提問→C 欄)
+   真的需要歌;前四列要的只是一條會被破壞的參考時間軸,而 scheduler 本來就在
+   生成一條。所以這裡先把不需要素材的那四列做掉。
+   一個修正:母文件寫「中間多插四小節」,但在循環的格子上每小節長得一樣,插
+   整小節偵測不到。等效且測得到的是「插拍」——把重拍位移,學生要在下一個小節
+   的第一拍重新上車,那正是 C2。 */
+const DRIFT_MAX = 8;            // 漂移上限(BPM),超過就不像現場了
+let chaosMode='off';            // off | drift | shift | blackout
+let bpm0=90, barDur0=0, origBarStart=0;   // 原速時間軸(不受漂移影響)
+let shiftPending=0, lastChaosBar=-99, chaosNote='';
+let blackoutOn=false;
+let boarding=null;              // {t0} 位移發生點,等下一次成功命中
+let boardBeats=[];              // 上車拍數
+let recovFrom=null, recovBeats=[];        // F1 掉拍復原:MISS→下一次 PERFECT
+let driftAbs=[], origAbs=[];    // drift:對漂移軸 / 對原速軸 的絕對偏差
+let blackAcc=[[],[]];           // [有聲, 靜音] 各自的絕對偏差
 let pendingBpm = null;
 let expected = [];              // {time, step, judged, result}
 let schedTimer = null;
@@ -663,14 +710,16 @@ function scheduler(){
   while(true){
     const t = stepTime(barStart, stepIdx, barDur, swing);
     if(t >= now + LOOKAHEAD) break;
-    // 節拍器:每拍頭
-    if(stepIdx%(grid/4)===0) clickSound(t, stepIdx===0);
+    // 節拍器:每拍頭(靜音段不出聲,但判定照常——這才是 B2 內在脈動)
+    if(stepIdx%(grid/4)===0 && !blackoutOn) clickSound(t, stepIdx===0);
     // 各聲部:練習聲部(🎯)建判定事件,其餘為背景陪伴
+    const oT = stepTime(origBarStart, stepIdx, barDur0||barDur, swing);
     for(const vc of VOICE_IDS){
       if(pattern[vc][stepIdx]>0){
-        drumSound(vc, t, pattern[vc][stepIdx]===2, vc===practiceVoice);
+        if(!blackoutOn) drumSound(vc, t, pattern[vc][stepIdx]===2, vc===practiceVoice);
         if(vc===practiceVoice){
-          expected.push({time:t, step:stepIdx, judged:false, result:'', target:dynTarget()});
+          expected.push({time:t, step:stepIdx, judged:false, result:'', target:dynTarget(),
+                         origTime:oT, blackout:blackoutOn});
           barExpected++;
         }
       }
@@ -678,7 +727,9 @@ function scheduler(){
     stepIdx++;
     if(stepIdx>=grid){
       stepIdx=0;
-      barStart += barDur;
+      barStart += barDur + shiftPending;
+      if(shiftPending!==0){ boarding={t0:barStart}; shiftPending=0; }
+      origBarStart += barDur0||barDur;
       onBarEnd();
       if(pendingBpm){ bpm=pendingBpm; pendingBpm=null; }
       barDur = 4*60/bpm;
@@ -704,6 +755,37 @@ function onBarEnd(){
   barExpected=0; barHitPts=0;
   barNo++;
   if(dynMode!=='off') updateDynStats();
+  driveChaos();
+  if(chaosMode!=='off') updateChaosStats();
+}
+
+/* 每個小節結束時決定要不要搞破壞 */
+function driveChaos(){
+  if(chaosMode==='off'){ blackoutOn=false; return; }
+  if(chaosMode==='drift'){
+    /* 會回歸的隨機游走,偏向變慢(會眾越唱越慢是現場最常見的那一種)。
+       純隨機游走沒有邊界:實測 80 小節後有一半以上會偏離 12 BPM 以上,
+       最誇張從 90 漂到 58——那不是被拖慢,是換了一首歌。所以加回歸力
+       與 ±8 BPM 的硬邊界,維持在「現場真的會發生」的範圍裡。 */
+    const dev  = bpm - bpm0;
+    const pull = -dev * 0.12;                 // 離起始速度越遠,拉回來的力越強
+    const nb = Math.max(bpm0-DRIFT_MAX, Math.min(bpm0+DRIFT_MAX,
+                 bpm + pull + (Math.random()-0.5)*1.6 - 0.25));
+    pendingBpm = nb;
+    $('bpm').value=Math.round(nb); $('bpmVal').textContent=Math.round(nb); $('hdBpm').textContent=Math.round(nb);
+    chaosNote = (nb<bpm0? '正在被拖慢 ':'正在被推快 ')+(nb-bpm0>=0?'+':'')+(nb-bpm0).toFixed(1)+' BPM';
+  }
+  if(chaosMode==='shift' && barNo-lastChaosBar >= 6+Math.floor(Math.random()*5)){
+    lastChaosBar=barNo;
+    const beats=(Math.random()<0.5?1:2) * (Math.random()<0.5?-1:1);   // ±1 或 ±2 拍
+    shiftPending = beats * (barDur/4);
+    chaosNote = (beats>0?'多了 ':'少了 ')+Math.abs(beats)+' 拍——下一個小節的第一拍上車';
+  }
+  if(chaosMode==='blackout'){
+    // 四小節有聲、四小節靜音
+    blackoutOn = (Math.floor(barNo/4) % 2)===1;
+    chaosNote = blackoutOn ? '靜音中——自己數' : '有聲';
+  }
 }
 
 /* =====================================================================
@@ -737,6 +819,18 @@ function judgeHit(rawT, hand, amp){
     hint = hint ? hint+' '+lvTxt : lvTxt;
     $('dynNow').textContent = Math.round(best.target*100)+'% / '+Math.round(lv*100)+'%';
   }
+  if(chaosMode!=='off'){
+    if(chaosMode==='drift' && best.origTime!=null){
+      driftAbs.push(Math.abs(ms));
+      origAbs.push(Math.abs((t-best.origTime)*1000));
+    }
+    if(chaosMode==='blackout') blackAcc[best.blackout?1:0].push(Math.abs(ms));
+    if(boarding && (r==='P'||r==='G')){
+      const beatDur=barDur/4;
+      boardBeats.push(Math.max(0,(best.time-boarding.t0)/beatDur));
+      boarding=null; updateChaosStats();   // 上車要立刻看到數字,不能等到小節結束
+    }
+  }
   registerJudge(r, ms, best, hint);
 }
 function registerJudge(r, ms, e, hint){
@@ -746,6 +840,12 @@ function registerJudge(r, ms, e, hint){
   bestCombo=Math.max(bestCombo,combo);
   score += PTS[r] * (1 + Math.min(combo,50)*0.01);
   if(r!=='M'){ recentDeltas.push(ms); if(recentDeltas.length>14) recentDeltas.shift(); }
+  // F1 掉拍復原:MISS 到下一次 PERFECT 的間隔(母文件 4.4 說「已經有現成資料」)
+  if(r==='M'){ if(recovFrom===null) recovFrom=e.time; }
+  else if(r==='P' && recovFrom!==null){
+    recovBeats.push(Math.max(0,(e.time-recovFrom)/(barDur/4)));
+    recovFrom=null; updateChaosStats();
+  }
   showJudge(r, ms, hint);
   addRipple(e.time + (offsets[inputSrc]||0), r==='P'?'#2F6FD6':r==='G'?'#D9A441':r==='O'?'#F1E7D3':'#E4502E');
   updateStats();
@@ -839,6 +939,49 @@ function updateDynStats(){
     $('dynCoup').style.color = Math.abs(c)<=8 ? 'var(--paper)' : '#E4502E';
   } else $('dynCoup').textContent='--';
 }
+
+/* =====================================================================
+   意外模式:統計與 UI
+===================================================================== */
+function avg(a){ return a.length? a.reduce((x,y)=>x+y,0)/a.length : null; }
+function updateChaosStats(){
+  if(chaosMode==='off') return;
+  $('chaosNote').textContent = chaosNote||'--';
+  const d=avg(driftAbs), o=avg(origAbs);
+  $('chDrift').textContent = d==null?'--':d.toFixed(0)+'ms';
+  $('chOrig').textContent  = o==null?'--':o.toFixed(0)+'ms';
+  if(d!=null&&o!=null&&driftAbs.length>=8){
+    $('chWhich').textContent = Math.abs(d-o)<6 ? '兩邊差不多' : (d<o? '你跟著漂了' : '你守住原速');
+  } else $('chWhich').textContent='--';
+  const b=avg(boardBeats);
+  $('chBoard').textContent = b==null?'--':b.toFixed(1)+' 拍';
+  const s0=avg(blackAcc[0]), s1=avg(blackAcc[1]);
+  $('chSnd').textContent = s0==null?'--':s0.toFixed(0)+'ms';
+  $('chSil').textContent = s1==null?'--':s1.toFixed(0)+'ms';
+  const rv=avg(recovBeats);
+  $('chRecov').textContent = rv==null?'--':rv.toFixed(1)+' 拍';
+  if(rv!=null) $('chRecov').style.color = rv<=4 ? 'var(--paper)' : '#E4502E';
+}
+function resetChaos(){
+  shiftPending=0; lastChaosBar=0; chaosNote=''; blackoutOn=false; boarding=null;
+  boardBeats=[]; recovFrom=null; recovBeats=[]; driftAbs=[]; origAbs=[]; blackAcc=[[],[]];
+}
+document.querySelectorAll('[data-chaos]').forEach(b=> b.onclick = ()=>{
+  document.querySelectorAll('[data-chaos]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); chaosMode=b.dataset.chaos;
+  $('chaosSec').style.display = chaosMode==='off' ? 'none' : '';
+  // 只顯示這個模式相關的列
+  const show=(id,on)=>{ const el=$(id); if(el) el.style.display = on?'':'none'; };
+  show('rowDrift1', chaosMode==='drift'); show('rowDrift2', chaosMode==='drift');
+  show('rowDrift3', chaosMode==='drift'); show('rowShift', chaosMode==='shift');
+  show('rowBlack1', chaosMode==='blackout'); show('rowBlack2', chaosMode==='blackout');
+  // 速度會漂跟自動加速會打架
+  if(chaosMode==='drift' && $('autoUp').checked){
+    $('autoUp').checked=false;
+    $('chaosHint').insertAdjacentHTML('afterbegin','<b style="color:#D9A441">已關閉「自動加速」——它跟速度會漂會互相打架。</b><br>');
+  }
+  resetChaos(); updateChaosStats();
+});
 
 /* =====================================================================
    麥克風 + AudioWorklet onset 偵測
@@ -1448,12 +1591,14 @@ async function startStop(){
   if(inputSrc==='mic' && !(await initMic())) return;
   resetStats();
   expected=[]; ripples=[]; dynRec=[]; barNo=0;
+  bpm0=bpm; barDur0=4*60/bpm0; resetChaos();
+  if(chaosMode!=='off') updateChaosStats();
   if(dynMode!=='off'){ updateDynStats(); $('dynNow').textContent='--'; }
   bpm=+$('bpm').value; barDur=4*60/bpm; stepIdx=0;
   // Count-in:先數一小節純節拍器(1 2 3 4),學生有預備拍才進節奏
   const t0 = ctx.currentTime + 0.35;
   for(let k=0;k<4;k++) clickSound(t0 + k*barDur/4, k===0);
-  barStart = t0 + barDur;
+  barStart = t0 + barDur; origBarStart = barStart;
   running=true; setGoUI(); requestWake();
   schedTimer=setInterval(scheduler, TICK);
 }
